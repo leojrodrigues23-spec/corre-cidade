@@ -1,0 +1,13 @@
+{
+  "name": "corre-cidade",
+  "version": "1.0.0",
+  "description": "Jogo de carros 3D multiplayer para navegador",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

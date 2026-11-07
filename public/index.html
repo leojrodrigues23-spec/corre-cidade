@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Corre Cidade — corrida multiplayer 3D</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏁</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="Jogo 3D"></canvas>
+
+<section id="lobby">
+  <form id="lobby-form" autocomplete="off">
+    <header>
+      <h1>Corre<br><span>Cidade</span></h1>
+      <p>Corra pelas ruas, pegue moedas e chegue antes dos amigos ao feixe de luz.</p>
+    </header>
+
+    <label class="field">Seu nome
+      <input id="name" maxlength="14" placeholder="Piloto" spellcheck="false">
+    </label>
+
+    <div class="field">Escolha o carro
+      <div id="cars"></div>
+    </div>
+
+    <div class="field">Cor
+      <div id="colors"></div>
+    </div>
+
+    <label class="field room">Sala
+      <input id="room" maxlength="16" spellcheck="false" aria-describedby="room-help">
+      <small id="room-help">Quem usar a mesma sala joga junto com você.</small>
+    </label>
+
+    <p id="lobby-error" role="alert"></p>
+    <button id="play" type="submit">Acelerar!</button>
+
+    <footer>
+      <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ou <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> dirigir</span>
+      <span><kbd>Shift</kbd> nitro</span>
+      <span><kbd>Espaço</kbd> derrapar</span>
+    </footer>
+  </form>
+</section>
+
+<div id="hud">
+  <div id="top-left">
+    <div id="minimap-wrap">
+      <canvas id="minimap"></canvas>
+      <div id="goal-chip"><i></i><span id="goal-dist">0 m</span></div>
+    </div>
+    <div id="feed" aria-live="polite"></div>
+  </div>
+
+  <div id="top-center">
+    <div id="time">3:00</div>
+    <div id="street"></div>
+  </div>
+
+  <div id="top-right">
+    <div id="tools">
+      <button id="btn-invite" type="button">Convidar</button>
+      <button id="btn-cam" type="button" title="Trocar câmera (C)" aria-label="Trocar câmera">🎥</button>
+      <button id="btn-mute" type="button" title="Som (M)" aria-label="Ligar ou desligar som">🔊</button>
+    </div>
+    <div id="panel">
+      <div id="panel-head"><span>Sala <b id="room-chip"></b></span><span id="players-chip"></span></div>
+      <ol id="board"></ol>
+    </div>
+  </div>
+
+  <div id="bottom-left">
+    <div id="my-score"><small>Pontos</small><b id="score">0</b><div id="score-pop"></div></div>
+    <div id="emotes"></div>
+  </div>
+
+  <div id="bottom-right">
+    <div id="dash">
+      <div class="row"><b id="speed">0</b><small>km/h</small></div>
+      <div id="nitro"><span>Nitro</span><div><i id="nitro-fill"></i></div></div>
+    </div>
+    <div id="actions">
+      <button id="btn-horn" type="button">📯 Buzina <kbd>H</kbd></button>
+      <button id="btn-reset" type="button">↺ Voltar à rua <kbd>R</kbd></button>
+    </div>
+  </div>
+
+  <div id="hint">
+    <span><kbd>↑</kbd> acelerar</span><span><kbd>←</kbd><kbd>→</kbd> virar</span><span><kbd>↓</kbd> frear</span>
+    <span><kbd>Shift</kbd> nitro</span><span><kbd>Espaço</kbd> derrapar</span><span>Bata em alguém para derrubar moedas</span>
+  </div>
+  <div id="stuck" hidden>Ficou preso? Aperte <kbd>R</kbd></div>
+  <div id="toast" role="status"></div>
+
+  <div id="touch">
+    <div class="group">
+      <button type="button" data-touch="left" aria-label="Virar à esquerda">◀</button>
+      <button type="button" data-touch="right" aria-label="Virar à direita">▶</button>
+    </div>
+    <div class="group right">
+      <button type="button" data-touch="drift" class="small" aria-label="Derrapar">Derrapar</button>
+      <button type="button" data-touch="nitro" class="small blue" aria-label="Nitro">Nitro</button>
+      <button type="button" data-touch="down" aria-label="Frear">▼</button>
+      <button type="button" data-touch="up" class="gas" aria-label="Acelerar">▲</button>
+    </div>
+  </div>
+</div>
+
+<div id="invite" class="modal" hidden>
+  <div class="card">
+    <h2>Chame os amigos</h2>
+    <p>Mande este link. Quem abrir entra direto na sua sala.</p>
+    <div class="copy-row">
+      <input id="invite-link" readonly aria-label="Link da sala">
+      <button id="invite-copy" type="button">Copiar</button>
+    </div>
+    <small id="invite-note"></small>
+    <button id="invite-close" type="button" class="ghost">Fechar</button>
+  </div>
+</div>
+
+<div id="results" class="modal" hidden>
+  <div class="card">
+    <h2 id="results-title"></h2>
+    <ol id="results-list"></ol>
+    <small>A próxima rodada começa em instantes…</small>
+  </div>
+</div>
+
+<div id="rotate"><span>📱↻</span>Gire o celular para jogar na horizontal</div>
+
+<div id="offline" hidden>Conexão perdida. Tentando voltar…</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

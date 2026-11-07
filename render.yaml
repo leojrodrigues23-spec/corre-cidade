@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: corre-cidade
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /info
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
