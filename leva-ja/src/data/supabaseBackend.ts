@@ -14,6 +14,9 @@ import {
   type Backend,
   BackendError,
   type DriverLocation,
+  type DriverPreferences,
+  type DriverPriceOption,
+  type PinCheck,
   type DriverStatus,
   type FareConfigRow,
   type Invite,
@@ -48,6 +51,10 @@ function toRide(r: Row): Ride {
     driverNetCents: r.driver_net_cents,
     manualPrice: r.manual_price,
     isSimulation: r.is_simulation,
+    targetDriverId: r.target_driver_id ?? null,
+    priceSource: r.price_source ?? 'automatico',
+    pinRequired: !!r.pin_required,
+    pinVerifiedAt: r.pin_verified_at ?? null,
     cancelReason: r.cancel_reason,
     cancelledBy: r.cancelled_by,
     searchExpiresAt: r.search_expires_at,
@@ -255,8 +262,31 @@ export class SupabaseBackend implements Backend {
     }
     throw new BackendError(code);
   }
-  async requestRide(input: { quoteId: string; pickup: LatLng & { address: string; accuracyM: number | null }; destAddress: string; notes?: string }) {
+  async listDriverPrices(quoteId: string, pickup: LatLng): Promise<DriverPriceOption[]> {
+    const rows = await this.rpc<Row[]>('list_driver_prices', { p_snapshot: quoteId, p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng });
+    return (rows ?? []).map((r) => ({
+      driverId: r.driver_id,
+      name: r.name,
+      rating: r.rating == null ? null : Number(r.rating),
+      vehicle: r.vehicle,
+      distanceM: r.distance_m,
+      priceMode: r.price_mode,
+      perKmCents: r.per_km_cents,
+      totalCents: r.total_cents,
+      requiresPin: r.requires_pin,
+    }));
+  }
+  async requestRide(input: {
+    quoteId: string;
+    pickup: LatLng & { address: string; accuracyM: number | null };
+    destAddress: string;
+    notes?: string;
+    driverId?: string;
+    expectedTotalCents?: number;
+  }) {
     return this.rpc<string>('request_ride', {
+      p_driver: input.driverId ?? null,
+      p_expected_total_cents: input.expectedTotalCents ?? null,
       p_snapshot: input.quoteId,
       p_pickup_lat: input.pickup.lat,
       p_pickup_lng: input.pickup.lng,
@@ -279,7 +309,9 @@ export class SupabaseBackend implements Backend {
     return {
       ride: toRide(d.ride),
       viewerRole: d.viewer_role,
+      pin: d.pin ?? null,
       fare: {
+        perKmCents: f.per_km_cents,
         version: f.version,
         pricingMode: f.pricing_mode,
         distanceM: f.distance_m,
@@ -332,19 +364,32 @@ export class SupabaseBackend implements Backend {
   async getDriverSetup() {
     const id = await this.uid();
     const [d, v, k] = await Promise.all([
-      this.sb.from('driver_profiles').select('status, is_available').eq('user_id', id).maybeSingle(),
+      this.sb.from('driver_profiles').select('status, is_available, require_pin, price_mode, price_per_km_cents').eq('user_id', id).maybeSingle(),
       this.sb.from('vehicles').select('make, model, color, plate, year').eq('driver_id', id).eq('active', true).maybeSingle(),
       this.getMyPixKey('recebimento_motorista'),
     ]);
     fail(d.error);
     if (!d.data) throw new BackendError('FORBIDDEN');
-    return { status: d.data.status as DriverStatus, isAvailable: d.data.is_available, vehicle: (v.data as Vehicle) ?? null, pixKey: k };
+    return {
+      status: d.data.status as DriverStatus,
+      isAvailable: d.data.is_available,
+      vehicle: (v.data as Vehicle) ?? null,
+      pixKey: k,
+      preferences: { requirePin: d.data.require_pin !== false, priceMode: d.data.price_mode ?? 'automatico', perKmCents: d.data.price_per_km_cents ?? null },
+    };
   }
   async saveVehicle(v: Vehicle) {
     await this.rpc('save_driver_vehicle', { p_make: v.make, p_model: v.model, p_color: v.color, p_year: v.year, p_plate: v.plate });
   }
   async saveDriverPixKey(k: PixKeyInfo) {
     await this.rpc('save_pix_key', { p_purpose: 'recebimento_motorista', p_type: k.type, p_value: k.value, p_holder: k.holder });
+  }
+  async saveDriverPreferences(p: DriverPreferences) {
+    await this.rpc('set_driver_preferences', { p_require_pin: p.requirePin, p_price_mode: p.priceMode, p_per_km_cents: p.perKmCents });
+  }
+  async verifyRidePin(rideId: string, pin: string): Promise<PinCheck> {
+    const r = await this.rpc<Row>('verify_ride_pin', { p_ride: rideId, p_pin: pin });
+    return { ok: !!r.ok, locked: !!r.locked, attemptsLeft: Number(r.attempts_left ?? 0) };
   }
   async setAvailability(available: boolean) {
     await this.rpc('set_driver_availability', { p_available: available });
@@ -375,6 +420,9 @@ export class SupabaseBackend implements Backend {
       requestedAt: r.requested_at,
       searchExpiresAt: r.search_expires_at,
       routeSource: r.route_source,
+      targeted: !!r.targeted,
+      priceSource: r.price_source ?? 'automatico',
+      perKmCents: r.per_km_cents,
     }));
   }
   async acceptRide(id: string) {

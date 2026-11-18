@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { decodePolyline, haversineM, type LatLng } from '../../core/geo';
-import { friendlyError } from '../../data/errors';
-import type { Place, Profile, Quote } from '../../data/types';
+import { errorCode, friendlyError } from '../../data/errors';
+import type { DriverPriceOption, Place, Profile, Quote } from '../../data/types';
 import { useGeolocation } from '../../geo/useGeolocation';
 import { type MapMarker, MapView } from '../../maps/MapView';
 import { resolveSuggestion, reverseGeocode, searchPlaces, type Suggestion } from '../../maps/places';
@@ -27,6 +27,32 @@ export function PassengerHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<Place[]>([]);
+  // modo de preço: tarifa automática (todos os motoristas) ou escolher um motorista pelo preço dele
+  const [priceMode, setPriceMode] = useState<'automatico' | 'escolher'>('automatico');
+  const [drivers, setDrivers] = useState<DriverPriceOption[] | null>(null);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [chosen, setChosen] = useState<DriverPriceOption | null>(null);
+
+  const loadDrivers = async () => {
+    if (!quote || !pickup) return;
+    setDriversLoading(true);
+    try {
+      const list = await backend.listDriverPrices(quote.id, pickup);
+      setDrivers(list);
+      setChosen((c) => (c ? list.find((d) => d.driverId === c.driverId) ?? null : null));
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setDriversLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (step !== 'quote' || priceMode !== 'escolher') return;
+    void loadDrivers();
+    const t = window.setInterval(() => void loadDrivers(), 15000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, priceMode, quote?.id]);
 
   const consent = !!profile?.locationConsentAt;
   const geo = useGeolocation({ enabled: consent });
@@ -101,6 +127,8 @@ export function PassengerHome() {
     try {
       const q = await backend.quoteRide(p, dest);
       setQuote(q);
+      setChosen(null);
+      setDrivers(null);
       setStep('quote');
     } catch (e) {
       setError(friendlyError(e));
@@ -118,10 +146,25 @@ export function PassengerHome() {
     setBusy(true);
     setError(null);
     try {
-      const id = await backend.requestRide({ quoteId: quote.id, pickup: { ...pickup, accuracyM: pickup.manual ? null : geo.fix?.accuracy ?? null }, destAddress: dest.address, notes: notes.trim() || undefined });
+      if (priceMode === 'escolher' && !chosen) {
+        setError('Escolha um motorista da lista ou use a tarifa automática.');
+        return;
+      }
+      const id = await backend.requestRide({
+        quoteId: quote.id,
+        pickup: { ...pickup, accuracyM: pickup.manual ? null : geo.fix?.accuracy ?? null },
+        destAddress: dest.address,
+        notes: notes.trim() || undefined,
+        ...(priceMode === 'escolher' && chosen ? { driverId: chosen.driverId, expectedTotalCents: chosen.totalCents } : {}),
+      });
       nav(`/corrida/${id}`);
     } catch (e) {
       setError(friendlyError(e));
+      const code = errorCode(e);
+      if (code === 'PRICE_CHANGED' || code === 'DRIVER_UNAVAILABLE') {
+        setChosen(null);
+        void loadDrivers();
+      }
     } finally {
       setBusy(false);
     }
@@ -133,6 +176,9 @@ export function PassengerHome() {
     setPickup(null);
     setQuote(null);
     setError(null);
+    setPriceMode('automatico');
+    setDrivers(null);
+    setChosen(null);
   };
 
   return (
@@ -304,22 +350,106 @@ export function PassengerHome() {
                   {settings?.pilot_mode && <span className="rounded-full bg-sun px-2 py-0.5 text-[10px] font-extrabold uppercase text-navy-950">Simulação</span>}
                 </div>
                 <p className="relative mt-3 text-4xl font-extrabold tabular-nums tracking-tight" data-testid="quote-total">
-                  {formatBRL(quote.totalCents)}
+                  {formatBRL(priceMode === 'escolher' && chosen ? chosen.totalCents : quote.totalCents)}
                 </p>
-                <p className="relative text-xs text-navy-100">{quote.pricingMode === 'variavel' ? 'Pode variar com o tempo real da viagem' : 'Preço fechado na solicitação'}</p>
+                <p className="relative text-xs text-navy-100">
+                  {priceMode === 'escolher'
+                    ? chosen
+                      ? `Preço de ${chosen.name}: ${formatBRL(chosen.perKmCents)}/km`
+                      : 'Escolha um motorista abaixo'
+                    : quote.pricingMode === 'variavel'
+                      ? 'Tarifa automática · pode variar com o tempo real da viagem'
+                      : 'Tarifa automática · preço fechado na solicitação'}
+                </p>
               </div>
+
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-mist p-1 dark:bg-navy-800" role="radiogroup" aria-label="Como escolher o preço">
+                {([
+                  ['automatico', 'Tarifa automática', 'Qualquer motorista'],
+                  ['escolher', 'Escolher motorista', 'Pelo preço de cada um'],
+                ] as const).map(([v, t, sub]) => (
+                  <button
+                    key={v}
+                    role="radio"
+                    aria-checked={priceMode === v}
+                    onClick={() => {
+                      setPriceMode(v);
+                      setError(null);
+                    }}
+                    data-testid={`price-mode-${v}`}
+                    className={`rounded-xl px-2 py-2 text-center transition ${priceMode === v ? 'bg-brand-grad text-navy-950 shadow-glow' : 'text-navy-600 hover:bg-white dark:text-navy-100 dark:hover:bg-navy-700'}`}
+                  >
+                    <span className="block text-sm font-extrabold">{t}</span>
+                    <span className="block text-[11px] font-semibold opacity-80">{sub}</span>
+                  </button>
+                ))}
+              </div>
+
+              {priceMode === 'escolher' && (
+                <div className="mb-3" data-testid="driver-prices">
+                  {driversLoading && !drivers && (
+                    <div className="space-y-2">
+                      <Skeleton className="h-16" />
+                      <Skeleton className="h-16" />
+                    </div>
+                  )}
+                  {drivers && drivers.length === 0 && (
+                    <Banner tone="info">Nenhum motorista disponível por perto agora. Tente a tarifa automática ou aguarde alguns instantes.</Banner>
+                  )}
+                  <ul className="space-y-2">
+                    {drivers?.map((d) => {
+                      const sel = chosen?.driverId === d.driverId;
+                      return (
+                        <li key={d.driverId}>
+                          <button
+                            onClick={() => setChosen(d)}
+                            aria-pressed={sel}
+                            data-testid="driver-option"
+                            className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition ${sel ? 'bg-brand-50 ring-brand dark:bg-brand/10' : 'bg-white ring-navy/5 hover:ring-brand/50 dark:bg-navy-900 dark:ring-white/10'}`}
+                          >
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-grad text-lg font-extrabold text-navy-950">{d.name.slice(0, 1)}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-bold">
+                                {d.name} {d.rating != null && <span className="text-sm font-semibold text-amber-500">★ {d.rating}</span>}
+                              </span>
+                              <span className="block truncate text-xs text-navy-500 dark:text-navy-300">{d.vehicle ?? 'Veículo cadastrado'}</span>
+                              <span className="mt-0.5 flex flex-wrap gap-1 text-[11px] font-bold">
+                                <span className="rounded-full bg-navy/5 px-2 py-0.5 dark:bg-white/10">a {formatDistance(d.distanceM)}</span>
+                                <span className={`rounded-full px-2 py-0.5 ${d.priceMode === 'proprio' ? 'bg-royal/10 text-royal dark:bg-royal-400/20 dark:text-royal-400' : 'bg-brand-50 text-brand-700 dark:bg-brand/15 dark:text-brand'}`}>
+                                  {d.priceMode === 'proprio' ? `${formatBRL(d.perKmCents)}/km` : 'Tarifa automática'}
+                                </span>
+                                {d.requiresPin && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-400/15 dark:text-sun">PIN</span>}
+                              </span>
+                            </span>
+                            <span className="text-right">
+                              <span className="block text-lg font-extrabold tabular-nums">{formatBRL(d.totalCents)}</span>
+                              {sel && <span className="text-[11px] font-bold text-brand-700 dark:text-brand">Escolhido</span>}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
               <PlaceLine icon="pin" title="Embarque" text={pickup.address} />
               <PlaceLine icon="flag" title="Destino" text={dest.address} />
               <details className="my-2 rounded-2xl bg-mist p-3 dark:bg-navy-800" open>
                 <summary className="cursor-pointer text-sm font-semibold">Detalhamento do preço</summary>
                 <div className="mt-2">
-                  <FareBreakdown q={quote} />
+                  {priceMode === 'escolher' && chosen && chosen.priceMode === 'proprio' ? (
+                    <p className="text-sm text-navy-600 dark:text-navy-100">
+                      Mesma base e tempo da tarifa Leva Já, com o preço por km de {chosen.name} ({formatBRL(chosen.perKmCents)}/km). O valor é recalculado e conferido no servidor.
+                    </p>
+                  ) : (
+                    <FareBreakdown q={quote} />
+                  )}
                 </div>
               </details>
               <Textarea placeholder="Observações para o motorista (opcional): ponto de referência, portão…" maxLength={200} value={notes} onChange={(e) => setNotes(e.target.value)} />
               {error && <Banner tone="error" className="mt-2">{error}</Banner>}
-              <Button block size="lg" className="mt-3" loading={busy} onClick={request} disabled={settings?.operations_enabled === false} data-testid="request-ride">
-                Solicitar corrida
+              <Button block size="lg" className="mt-3" loading={busy} onClick={request} disabled={settings?.operations_enabled === false || (priceMode === 'escolher' && !chosen)} data-testid="request-ride">
+                {priceMode === 'escolher' ? (chosen ? `Pedir com ${chosen.name}` : 'Escolha um motorista') : 'Solicitar corrida'}
               </Button>
             </div>
           )}

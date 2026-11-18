@@ -10,6 +10,8 @@ export interface MapMarker {
   accuracyM?: number | null;
   stale?: boolean;
   label?: string;
+  /** etiqueta exibida ao lado do marcador (ex.: "4 min · 1,2 km" do motorista chegando) */
+  badge?: string | null;
 }
 
 export interface MapViewProps {
@@ -51,6 +53,14 @@ function markerIcon(kind: MapMarker['kind'], stale?: boolean): google.maps.Symbo
   return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(32, 41), anchor: new google.maps.Point(16, 41) };
 }
 
+/** Etiqueta em forma de pílula, desenhada como imagem para acompanhar o marcador no Google Maps. */
+function badgeIcon(text: string): google.maps.Icon {
+  const w = Math.round(text.length * 7.4 + 22);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="28" viewBox="0 0 ${w} 28"><rect x="1" y="1" width="${w - 2}" height="26" rx="13" fill="#0A1B2C" stroke="#00C896" stroke-width="2"/><text x="${w / 2}" y="18.5" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="800" fill="#ffffff">${text.replace(/[<&>]/g, '')}</text></svg>`;
+  // ancorado à esquerda do centro: a pílula fica à direita do carrinho
+  return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(w, 28), anchor: new google.maps.Point(-26, 14) };
+}
+
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#132a3f' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#9fb3c8' }] },
@@ -63,7 +73,7 @@ const DARK_STYLE: google.maps.MapTypeStyle[] = [
 function GoogleMap({ center, zoom = 15, markers, path, fitKey, pickMode, onPick, className, dark, onFail }: MapViewProps & { onFail: (r: string) => void }) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
-  const objs = useRef(new Map<string, { marker: google.maps.Marker; circle?: google.maps.Circle; shown: LatLng; anim?: number }>());
+  const objs = useRef(new Map<string, { marker: google.maps.Marker; badge?: google.maps.Marker; circle?: google.maps.Circle; shown: LatLng; anim?: number }>());
   const line = useRef<google.maps.Polyline | null>(null);
   const [ready, setReady] = useState(false);
   const onPickRef = useRef(onPick);
@@ -121,10 +131,18 @@ function GoogleMap({ center, zoom = 15, markers, path, fitKey, pickMode, onPick,
           const k = Math.min(1, (t - start) / 900);
           const p = lerpLatLng(from, to, k);
           o!.marker.setPosition(p);
+          o!.badge?.setPosition(p);
           o!.shown = p;
           if (k < 1) o!.anim = requestAnimationFrame(step);
         };
         o.anim = requestAnimationFrame(step);
+      }
+      if (m.badge) {
+        if (!o.badge) o.badge = new google.maps.Marker({ map: map.current, position: o.shown, clickable: false, zIndex: 11 });
+        o.badge.setIcon(badgeIcon(m.badge));
+      } else if (o.badge) {
+        o.badge.setMap(null);
+        o.badge = undefined;
       }
       if (m.accuracyM && (m.kind === 'driver' || m.kind === 'me')) {
         if (!o.circle) o.circle = new google.maps.Circle({ map: map.current, strokeColor: COLORS[m.kind], strokeOpacity: 0.5, strokeWeight: 1, fillColor: COLORS[m.kind], fillOpacity: 0.12, clickable: false });
@@ -138,6 +156,7 @@ function GoogleMap({ center, zoom = 15, markers, path, fitKey, pickMode, onPick,
     for (const [id, o] of objs.current) {
       if (!seen.has(id)) {
         o.marker.setMap(null);
+        o.badge?.setMap(null);
         o.circle?.setMap(null);
         objs.current.delete(id);
       }
@@ -306,6 +325,11 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
             return (
               <div key={m.id} className={`absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] border-white shadow-lg ${m.kind === 'driver' && !m.stale ? 'lj-pulse' : ''}`} style={{ left: p.x, top: p.y, width: m.kind === 'driver' ? 38 : 18, height: m.kind === 'driver' ? 38 : 18, background: color }} title={m.label}>
                 {m.kind === 'driver' && <Icon name="car" size={18} className="relative z-10 text-white" />}
+                {m.badge && (
+                  <span className="absolute left-[calc(100%+6px)] top-1/2 z-10 -translate-y-1/2 whitespace-nowrap rounded-full bg-navy-950 px-2.5 py-1 text-xs font-extrabold tabular-nums text-white shadow-float ring-2 ring-brand" data-testid="driver-eta-badge">
+                    {m.badge}
+                  </span>
+                )}
               </div>
             );
           return (

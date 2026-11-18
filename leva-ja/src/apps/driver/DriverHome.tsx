@@ -213,7 +213,14 @@ export function DriverHome() {
             {offers?.map((o) => {
               const left = Math.max(0, Math.round((Date.parse(o.searchExpiresAt) - now) / 1000));
               return (
-                <Card key={o.rideId} className="animate-rise" data-testid="offer-card">
+                <Card key={o.rideId} className={`animate-rise ${o.targeted ? 'ring-2 ring-brand' : ''}`} data-testid="offer-card">
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {o.targeted ? (
+                      <Badge tone="green">Escolheu você · {formatBRL(o.perKmCents)}/km</Badge>
+                    ) : (
+                      <Badge tone="navy">Tarifa automática · {formatBRL(o.perKmCents)}/km</Badge>
+                    )}
+                  </div>
                   <div className="mb-2 flex items-start justify-between">
                     <div>
                       <p className="bg-brand-grad bg-clip-text text-3xl font-extrabold tabular-nums text-transparent">{formatBRL(o.driverNetCents)}</p>

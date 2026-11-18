@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { assessFix, decodePolyline } from '../../core/geo';
+import { assessFix, decodePolyline, haversineM } from '../../core/geo';
 import { DRIVER_CANCEL_REASONS, nextDriverAction } from '../../core/ride';
 import { friendlyError } from '../../data/errors';
 import { type MapMarker, MapView } from '../../maps/MapView';
 import { googleMapsNavUrl, wazeUrl } from '../../maps/navigation';
-import { Banner, Button, Card, IconButton, KeyValue, Modal, Select, Skeleton, StarRating, useToast } from '../../ui/components';
-import { formatBRL, formatDateTime } from '../../ui/format';
+import { Banner, Button, Card, IconButton, Input, KeyValue, Modal, Select, Skeleton, StarRating, useToast } from '../../ui/components';
+import { formatBRL, formatDateTime, formatEtaBadge } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { useApp } from '../shared/AppContext';
 import { PixPanel, PlaceLine, RideStatusPill, RideTimeline, useRideDetails } from '../shared/ride';
@@ -24,6 +24,9 @@ export function DriverRidePage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState(DRIVER_CANCEL_REASONS[0]);
   const [stars, setStars] = useState(0);
+  const [pin, setPin] = useState('');
+  const [pinMsg, setPinMsg] = useState<{ tone: 'error' | 'warn'; text: string } | null>(null);
+  const [pinLocked, setPinLocked] = useState(false);
   const ride = details?.ride;
 
   // simulador (modo demo): desloca em direção ao embarque e depois ao destino
@@ -42,7 +45,18 @@ export function DriverRidePage() {
       { id: 'pickup', kind: 'pickup', position: ride.pickup, label: 'Embarque' },
       { id: 'dest', kind: 'dest', position: ride.dest, label: 'Destino' },
     ];
-    if (d.fix) m.push({ id: 'me', kind: 'driver', position: d.fix, accuracyM: d.fix.accuracy, stale: assessFix(d.fix, Date.now()).stale, label: 'Você' });
+    if (d.fix) {
+      const goal = ['aceita', 'motorista_a_caminho'].includes(ride.status) ? ride.pickup : ride.status === 'em_andamento' ? ride.dest : null;
+      m.push({
+        id: 'me',
+        kind: 'driver',
+        position: d.fix,
+        accuracyM: d.fix.accuracy,
+        stale: assessFix(d.fix, Date.now()).stale,
+        label: 'Você',
+        badge: goal ? formatEtaBadge(haversineM(d.fix, goal) * 1.35) : null,
+      });
+    }
     return m;
   }, [ride, d.fix]);
 
@@ -55,6 +69,32 @@ export function DriverRidePage() {
   const next = nextDriverAction(ride.status);
   const target = ride.status === 'em_andamento' || ride.status === 'motorista_chegou' ? ride.dest : ride.pickup;
   const path = details.fare.routePolyline ? decodePolyline(details.fare.routePolyline) : [ride.pickup, ride.dest];
+
+  const needsPin = ride.status === 'motorista_chegou' && ride.pinRequired && !ride.pinVerifiedAt;
+  const checkPin = async () => {
+    if (!/^\d{4}$/.test(pin)) return setPinMsg({ tone: 'error', text: 'Digite os 4 números do PIN.' });
+    setBusy(true);
+    try {
+      const r = await backend.verifyRidePin(ride.id, pin);
+      if (r.ok) {
+        setPinMsg(null);
+        toast('PIN confirmado. Pode iniciar a corrida.', 'success');
+        await reload();
+      } else {
+        setPin('');
+        setPinLocked(r.locked);
+        setPinMsg(
+          r.locked
+            ? { tone: 'warn', text: 'Muitas tentativas. Confirme pessoalmente quem é o passageiro; se houver dúvida, cancele a corrida.' }
+            : { tone: 'error', text: `PIN incorreto. ${r.attemptsLeft} tentativa(s) restante(s). Confira se é o passageiro certo.` },
+        );
+      }
+    } catch (e) {
+      setPinMsg({ tone: 'error', text: friendlyError(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const advance = async () => {
     if (!next) return;
@@ -95,6 +135,7 @@ export function DriverRidePage() {
           <PlaceLine icon="flag" title="Destino" text={ride.dest.address} />
           {ride.notes && <Banner tone="info" className="mt-2" title="Observação do passageiro">{ride.notes}</Banner>}
           {ride.manualPrice && <Banner tone="warn" className="mt-2">Preço definido manualmente pelo administrador.</Banner>}
+          {ride.priceSource === 'motorista' && <Banner tone="info" className="mt-2">Corrida no seu preço ({formatBRL(details.fare.perKmCents)}/km): o passageiro escolheu você.</Banner>}
 
           {next && (
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -108,7 +149,34 @@ export function DriverRidePage() {
             </div>
           )}
 
-          {next && (
+          {needsPin && (
+            <div className="mt-3 rounded-2xl bg-royal/10 p-3 ring-1 ring-royal/20 dark:bg-royal-400/15 dark:ring-royal-400/30" data-testid="pin-check">
+              <p className="font-extrabold">Peça o PIN ao passageiro</p>
+              <p className="mb-2 text-xs text-navy-600 dark:text-navy-100">Ele aparece no app de quem pediu a corrida. Só inicie se o código bater.</p>
+              <div className="flex gap-2">
+                <Input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  placeholder="0000"
+                  aria-label="PIN do passageiro"
+                  value={pin}
+                  disabled={pinLocked}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  onKeyDown={(e) => e.key === 'Enter' && void checkPin()}
+                  className="text-center font-mono text-2xl font-extrabold tracking-[0.5em]"
+                  data-testid="pin-input"
+                />
+                <Button size="lg" loading={busy} disabled={pinLocked || pin.length !== 4} onClick={checkPin} data-testid="pin-submit">
+                  Conferir
+                </Button>
+              </div>
+              {pinMsg && <Banner tone={pinMsg.tone} className="mt-2">{pinMsg.text}</Banner>}
+            </div>
+          )}
+          {ride.status === 'motorista_chegou' && ride.pinVerifiedAt && <Banner tone="success" className="mt-3">PIN confirmado. Passageiro certo!</Banner>}
+
+          {next && !needsPin && (
             <Button block size="lg" className="mt-3" loading={busy} onClick={advance} data-testid="driver-advance">
               {confirmFinish ? 'Confirmar: finalizar corrida' : next.label}
             </Button>
@@ -173,7 +241,13 @@ export function DriverRidePage() {
       </div>
 
       <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancelar participação">
-        <p className="mb-2 text-sm">{ride.status === 'motorista_chegou' ? 'A corrida será cancelada.' : 'A corrida volta para a fila e será oferecida a outro motorista.'}</p>
+        <p className="mb-2 text-sm">
+          {ride.status === 'motorista_chegou'
+            ? 'A corrida será cancelada.'
+            : ride.targetDriverId
+              ? 'O passageiro escolheu você; ele será avisado para escolher outro motorista.'
+              : 'A corrida volta para a fila e será oferecida a outro motorista.'}
+        </p>
         <Select value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Motivo">
           {DRIVER_CANCEL_REASONS.map((r) => (
             <option key={r}>{r}</option>

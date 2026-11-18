@@ -6,6 +6,8 @@ export type Role = 'passageiro' | 'motorista' | 'admin';
 export type AppKind = 'passageiro' | 'motorista' | 'admin';
 export type DriverStatus = 'pendente' | 'aprovado' | 'suspenso' | 'revogado';
 export type RouteSource = 'google_routes' | 'simulada';
+export type PriceMode = 'automatico' | 'proprio';
+export type PriceSource = 'automatico' | 'motorista';
 
 export interface Session {
   userId: string;
@@ -48,6 +50,10 @@ export interface PublicSettings {
   map_defaults: MapDefaults;
   service_area: { name: string; polygon: LatLng[] };
   support_contact: string | null;
+  driver_custom_price_enabled: boolean;
+  driver_price_per_km_min_cents: number;
+  driver_price_per_km_max_cents: number;
+  pin_max_attempts: number;
 }
 
 export interface Place extends LatLng {
@@ -92,6 +98,12 @@ export interface Ride {
   driverNetCents: number;
   manualPrice: boolean;
   isSimulation: boolean;
+  /** corrida pedida para um motorista específico (escolhido pelo preço) */
+  targetDriverId: string | null;
+  priceSource: PriceSource;
+  /** o motorista desta corrida exige PIN para iniciar */
+  pinRequired: boolean;
+  pinVerifiedAt: string | null;
   cancelReason: string | null;
   cancelledBy: Role | null;
   searchExpiresAt: string | null;
@@ -126,7 +138,10 @@ export interface Vehicle {
 export interface RideDetails {
   ride: Ride;
   viewerRole: Role;
+  /** PIN de embarque: SOMENTE para o passageiro, até a corrida começar */
+  pin: string | null;
   fare: {
+    perKmCents: number;
     version: number;
     pricingMode: string;
     distanceM: number;
@@ -160,6 +175,35 @@ export interface Offer {
   requestedAt: string;
   searchExpiresAt: string;
   routeSource: RouteSource;
+  /** o passageiro escolheu este motorista pelo preço */
+  targeted: boolean;
+  priceSource: PriceSource;
+  perKmCents: number;
+}
+
+/** Motorista disponível e o preço que ele cobraria por esta cotação */
+export interface DriverPriceOption {
+  driverId: string;
+  name: string;
+  rating: number | null;
+  vehicle: string | null;
+  distanceM: number;
+  priceMode: PriceMode;
+  perKmCents: number;
+  totalCents: number;
+  requiresPin: boolean;
+}
+
+export interface DriverPreferences {
+  requirePin: boolean;
+  priceMode: PriceMode;
+  perKmCents: number | null;
+}
+
+export interface PinCheck {
+  ok: boolean;
+  locked: boolean;
+  attemptsLeft: number;
 }
 
 export interface DriverLocation extends LatLng {
@@ -182,6 +226,7 @@ export interface DriverSetup {
   isAvailable: boolean;
   vehicle: Vehicle | null;
   pixKey: PixKeyInfo | null;
+  preferences: DriverPreferences;
 }
 
 export interface Earnings {
@@ -323,7 +368,18 @@ export interface Backend {
 
   // Passageiro
   quoteRide(origin: LatLng, dest: LatLng): Promise<Quote>;
-  requestRide(input: { quoteId: string; pickup: LatLng & { address: string; accuracyM: number | null }; destAddress: string; notes?: string }): Promise<string>;
+  /** motoristas disponíveis perto do embarque, com o preço de cada um para esta cotação */
+  listDriverPrices(quoteId: string, pickup: LatLng): Promise<DriverPriceOption[]>;
+  requestRide(input: {
+    quoteId: string;
+    pickup: LatLng & { address: string; accuracyM: number | null };
+    destAddress: string;
+    notes?: string;
+    /** pedir direto a um motorista escolhido (preço dele); sem isso, tarifa automática para todos */
+    driverId?: string;
+    /** total que o passageiro viu; se o preço mudou, o servidor recusa com PRICE_CHANGED */
+    expectedTotalCents?: number;
+  }): Promise<string>;
   getActiveRideId(): Promise<string | null>;
   getRideDetails(id: string): Promise<RideDetails>;
   listMyRides(): Promise<Ride[]>;
@@ -337,6 +393,8 @@ export interface Backend {
   getDriverSetup(): Promise<DriverSetup>;
   saveVehicle(v: Vehicle): Promise<void>;
   saveDriverPixKey(k: PixKeyInfo): Promise<void>;
+  saveDriverPreferences(p: DriverPreferences): Promise<void>;
+  verifyRidePin(rideId: string, pin: string): Promise<PinCheck>;
   setAvailability(available: boolean): Promise<void>;
   pushLocation(fix: { lat: number; lng: number; accuracy: number; heading: number | null; speed: number | null; timestamp: number }): Promise<{ accepted: boolean; reason?: string }>;
   listOpenRides(): Promise<Offer[]>;

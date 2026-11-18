@@ -31,3 +31,12 @@ export function centsFromInput(v: string): number | null {
 export function centsToInput(c: number): string {
   return (c / 100).toFixed(2).replace('.', ',');
 }
+
+/** Velocidade média urbana usada nas estimativas locais (sem chamar API paga a cada sinal de GPS). */
+export const URBAN_SPEED_MS = 25000 / 3600;
+
+/** Etiqueta curta para o carrinho no mapa: "4 min · 850 m" / "12 min · 3,4 km". */
+export function formatEtaBadge(distanceM: number): string {
+  const d = distanceM < 1000 ? Math.max(10, Math.round(distanceM / 10) * 10) : distanceM;
+  return `${formatDuration(distanceM / URBAN_SPEED_MS)} · ${formatDistance(d)}`;
+}

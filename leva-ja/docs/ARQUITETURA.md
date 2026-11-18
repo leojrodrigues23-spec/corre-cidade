@@ -57,3 +57,19 @@ Somente a última posição do motorista é guardada; apagada ao ficar indispon�
 | ETA de aproximação estimado localmente | evitar chamada paga a cada posição | é exibido como "estimativa" |
 | Push via notificação local | Web Push exige VAPID + servidor; iOS só com app instalado | ver LIMITACOES.md |
 | PWA para motorista | instalação simples no piloto | GPS para com tela bloqueada (iOS); módulo `runtime.tsx` isolado para trocar por app nativo |
+
+## PIN de embarque e preço por km do motorista (migração 20261118000004)
+
+- **PIN de embarque**: toda corrida ganha um código de 4 dígitos (`ride_pins`, sem nenhuma permissão de leitura direta).
+  Só o passageiro recebe o PIN, via `get_ride_details`, até a corrida começar. Se o motorista usa PIN (preferência
+  `driver_profiles.require_pin`, padrão ligado; copiada para `ride_requests.pin_required` no aceite), `advance_ride` recusa
+  `em_andamento` com `PIN_REQUIRED` até `verify_ride_pin` acertar o código. O limite de tentativas vem de `pin_max_attempts` (padrão 5).
+- **Preço por km do motorista**: o motorista escolhe `automatico` (tarifa Leva Já) ou `proprio`, com o valor por km dentro
+  de `driver_price_per_km_min_cents` e `driver_price_per_km_max_cents`. O admin pode desligar tudo com `driver_custom_price_enabled`.
+  Base, tempo, mínimo e comissão continuam vindo da tarifa vigente.
+- **Escolha do passageiro**: na tarifa automática, a oferta vai para todos os motoristas aptos. Em "escolher motorista",
+  `list_driver_prices` mostra os motoristas aptos com o total de cada um, e `request_ride(..., p_driver, p_expected_total_cents)`
+  recalcula o preço no servidor e recusa com `PRICE_CHANGED` se o valor mudou.
+  A corrida fica **direcionada**: só aquele motorista a vê e aceita. Se ele recusa ou desiste, a busca termina na hora e o passageiro escolhe de novo.
+- **Etiqueta no mapa**: o carrinho do motorista mostra tempo e distância estimados até o embarque (ou até o destino, em viagem).
+  É uma estimativa local (linha reta × 1,35 a 25 km/h), sem chamar a API paga a cada sinal de GPS.

@@ -5,7 +5,7 @@ import { PASSENGER_CANCEL_REASONS, TERMINAL_STATUSES } from '../../core/ride';
 import { friendlyError } from '../../data/errors';
 import { type MapMarker, MapView } from '../../maps/MapView';
 import { Banner, Button, Card, IconButton, KeyValue, Modal, Select, Skeleton, StarRating, Textarea, useToast } from '../../ui/components';
-import { formatBRL, formatDateTime, formatDistance, formatDuration } from '../../ui/format';
+import { formatBRL, formatDateTime, formatEtaBadge } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { useApp } from '../shared/AppContext';
 import { FareBreakdown, PixPanel, PlaceLine, RideStatusPill, RideTimeline, useDriverLocation, useRideDetails } from '../shared/ride';
@@ -36,7 +36,14 @@ export function PassengerRidePage() {
       { id: 'pickup', kind: 'pickup', position: ride.pickup, label: 'Embarque' },
       { id: 'dest', kind: 'dest', position: ride.dest, label: 'Destino' },
     ];
-    if (loc && tracking) m.push({ id: 'driver', kind: 'driver', position: loc, accuracyM: loc.accuracyM, stale: !live, label: 'Motorista' });
+    if (loc && tracking) {
+      // distância/tempo ao lado do carrinho: até o embarque (chegando) ou até o destino (em viagem)
+      let badge: string | null = null;
+      if (ride.status === 'motorista_chegou') badge = 'Chegou';
+      else if (ride.status === 'em_andamento') badge = formatEtaBadge(haversineM(loc, ride.dest) * 1.35);
+      else badge = formatEtaBadge(haversineM(loc, ride.pickup) * 1.35);
+      m.push({ id: 'driver', kind: 'driver', position: loc, accuracyM: loc.accuracyM, stale: !live, label: 'Motorista', badge: live ? badge : 'Sem sinal' });
+    }
     return m;
   }, [ride, loc, live, tracking]);
 
@@ -101,7 +108,8 @@ export function PassengerRidePage() {
                   <Icon name="car" size={30} />
                 </span>
               </div>
-              <p className="text-lg font-bold">Procurando motorista…</p>
+              <p className="text-lg font-bold">{ride.targetDriverId ? 'Aguardando o motorista escolhido…' : 'Procurando motorista…'}</p>
+              {ride.priceSource === 'motorista' && <p className="text-sm font-semibold text-brand-700 dark:text-brand">Preço do motorista: {formatBRL(ride.totalCents)}</p>}
               {searchLeft !== null && <p className="text-sm text-navy-500 dark:text-navy-300">A busca expira em {Math.floor(searchLeft / 60)}:{String(searchLeft % 60).padStart(2, '0')}</p>}
             </div>
           )}
@@ -123,6 +131,25 @@ export function PassengerRidePage() {
             </div>
           )}
 
+          {details.pin && ride.pinRequired && !ride.pinVerifiedAt && ['aceita', 'motorista_a_caminho', 'motorista_chegou'].includes(ride.status) && (
+            <div className="my-2 flex items-center gap-3 rounded-2xl bg-royal/10 p-3 ring-1 ring-royal/20 dark:bg-royal-400/15 dark:ring-royal-400/30" data-testid="ride-pin">
+              <div className="min-w-0 flex-1">
+                <p className="font-extrabold">PIN desta corrida</p>
+                <p className="text-xs text-navy-600 dark:text-navy-100">Diga ao motorista só quando entrar no carro certo.</p>
+              </div>
+              <div className="flex gap-1.5" aria-label={`PIN ${details.pin.split('').join(' ')}`}>
+                {details.pin.split('').map((d, i) => (
+                  <span key={i} className="flex h-11 w-9 items-center justify-center rounded-xl bg-royal text-2xl font-extrabold text-white shadow-float dark:bg-royal-400">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {ride.pinVerifiedAt && ride.status === 'motorista_chegou' && (
+            <Banner tone="success" className="my-2">PIN confirmado pelo motorista. Boa viagem!</Banner>
+          )}
+
           {tracking && (
             <div className="mt-1 rounded-2xl bg-mist p-3 text-sm dark:bg-navy-800">
               {ride.status === 'motorista_chegou' ? (
@@ -131,7 +158,7 @@ export function PassengerRidePage() {
                 <p className="font-semibold">Boa viagem! Destino: {ride.dest.address}</p>
               ) : approachM !== null ? (
                 <p className="font-semibold">
-                  Chegada estimada ≈ {formatDuration(approachM / (25000 / 3600))} · {formatDistance(approachM)} <span className="font-normal text-navy-500">(estimativa)</span>
+                  Chegada estimada ≈ {formatEtaBadge(approachM)} <span className="font-normal text-navy-500">(estimativa)</span>
                 </p>
               ) : (
                 <p className="font-semibold">Aguardando a posição do motorista…</p>
@@ -159,7 +186,13 @@ export function PassengerRidePage() {
 
           {(ride.status === 'cancelada' || ride.status === 'expirada') && (
             <div className="mt-3">
-              <Banner tone="warn">{ride.status === 'expirada' ? 'Nenhum motorista aceitou dentro do tempo limite.' : `Corrida cancelada${ride.cancelReason ? `: ${ride.cancelReason}` : ''}.`}</Banner>
+              <Banner tone="warn">
+                {ride.status === 'expirada'
+                  ? ride.targetDriverId
+                    ? 'O motorista escolhido não pôde atender. Escolha outro motorista ou peça pela tarifa automática.'
+                    : 'Nenhum motorista aceitou dentro do tempo limite.'
+                  : `Corrida cancelada${ride.cancelReason ? `: ${ride.cancelReason}` : ''}.`}
+              </Banner>
               <Button block className="mt-3" onClick={() => nav('/')}>
                 Solicitar novamente
               </Button>

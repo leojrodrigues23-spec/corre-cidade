@@ -3,8 +3,8 @@ import { HashRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { normalizePixKey, type PixKeyType } from '../../core/pix';
 import { normalizePlate } from '../../core/validation';
 import { friendlyError } from '../../data/errors';
-import type { Earnings, Ride } from '../../data/types';
-import { Banner, Button, Card, EmptyState, Field, Input, KeyValue, SectionTitle, Select, Skeleton, ToastProvider, useToast } from '../../ui/components';
+import type { DriverPreferences, Earnings, Ride } from '../../data/types';
+import { Banner, Button, Card, EmptyState, Field, Input, KeyValue, SectionTitle, Select, Skeleton, ToastProvider, Toggle, useToast } from '../../ui/components';
 import { formatBRL, formatDateTime } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { AppProvider, useApp } from '../shared/AppContext';
@@ -175,6 +175,7 @@ function DriverSetupForms() {
       <Card>
         <p className="font-semibold">{{ pendente: 'Aguardando aprovação', aprovado: 'Aprovado', suspenso: 'Suspenso', revogado: 'Revogado' }[s.status]}</p>
       </Card>
+      <DriverPreferencesCard prefs={s.preferences} onSaved={d.reloadSetup} />
       <SectionTitle>Veículo</SectionTitle>
       <Card>
         <div className="grid grid-cols-2 gap-x-3">
@@ -237,6 +238,98 @@ function DriverSetupForms() {
           }}
         >
           Salvar chave Pix
+        </Button>
+      </Card>
+    </>
+  );
+}
+
+/** Preferências de corrida: PIN de embarque e modo de preço (automático ou preço próprio por km). */
+function DriverPreferencesCard({ prefs, onSaved }: { prefs: DriverPreferences; onSaved: () => Promise<void> }) {
+  const { backend, settings } = useApp();
+  const toast = useToast();
+  const [requirePin, setRequirePin] = useState(prefs.requirePin);
+  const [mode, setMode] = useState(prefs.priceMode);
+  const [perKm, setPerKm] = useState(prefs.perKmCents != null ? (prefs.perKmCents / 100).toFixed(2).replace('.', ',') : '');
+  const [defaultPerKm, setDefaultPerKm] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    backend.getActiveFare().then((f) => setDefaultPerKm(f.perKmCents)).catch(() => undefined);
+  }, [backend]);
+  const min = settings?.driver_price_per_km_min_cents ?? 100;
+  const max = settings?.driver_price_per_km_max_cents ?? 1000;
+  const customEnabled = settings?.driver_custom_price_enabled !== false;
+  const cents = Math.round(Number(perKm.replace(/\./g, '').replace(',', '.')) * 100);
+
+  const save = async () => {
+    if (mode === 'proprio' && (!Number.isFinite(cents) || cents < min || cents > max)) return setErr(`Informe um valor entre ${formatBRL(min)} e ${formatBRL(max)} por km.`);
+    setErr(null);
+    setBusy(true);
+    try {
+      await backend.saveDriverPreferences({ requirePin, priceMode: mode, perKmCents: mode === 'proprio' ? cents : prefs.perKmCents });
+      await onSaved();
+      toast('Preferências salvas', 'success');
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <SectionTitle>Preferências de corrida</SectionTitle>
+      <Card data-testid="driver-preferences">
+        <Toggle
+          checked={requirePin}
+          onChange={setRequirePin}
+          label="Exigir PIN no embarque"
+          description="O passageiro diz um código de 4 números antes de entrar. Você confere e só então inicia a corrida."
+        />
+        <div className="my-3 h-px bg-navy/5 dark:bg-white/10" />
+        <p className="font-semibold">Como você cobra</p>
+        <p className="mb-2 text-sm text-navy-500 dark:text-navy-300">Os passageiros podem escolher motoristas pelo preço. Seu modo aparece na lista para eles.</p>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Modo de preço">
+          {([
+            ['automatico', 'Automático', defaultPerKm != null ? `Tarifa Leva Já (${formatBRL(defaultPerKm)}/km)` : 'Tarifa Leva Já'],
+            ['proprio', 'Meu preço por km', customEnabled ? `Entre ${formatBRL(min)} e ${formatBRL(max)}` : 'Desativado pelo Leva Já'],
+          ] as const).map(([v, t, sub]) => (
+            <button
+              key={v}
+              role="radio"
+              aria-checked={mode === v}
+              disabled={v === 'proprio' && !customEnabled}
+              onClick={() => setMode(v)}
+              data-testid={`driver-price-${v}`}
+              className={`rounded-2xl p-3 text-left ring-2 transition disabled:opacity-50 ${mode === v ? 'bg-brand-50 ring-brand dark:bg-brand/10' : 'bg-mist ring-transparent dark:bg-navy-800'}`}
+            >
+              <span className="block font-extrabold">{t}</span>
+              <span className="block text-xs text-navy-500 dark:text-navy-300">{sub}</span>
+            </button>
+          ))}
+        </div>
+        {mode === 'proprio' && (
+          <div className="mt-3">
+            <Field label="Quanto você quer ganhar por km (R$)" hint="Base e tempo seguem a tarifa Leva Já; só o valor por km muda.">
+              {(id) => (
+                <div className="flex items-center gap-2">
+                  <span className="font-bold">R$</span>
+                  <Input id={id} inputMode="decimal" placeholder="3,00" value={perKm} onChange={(e) => setPerKm(e.target.value.replace(/[^\d,]/g, '').slice(0, 6))} data-testid="driver-per-km" />
+                  <span className="text-sm text-navy-500">/km</span>
+                </div>
+              )}
+            </Field>
+            {Number.isFinite(cents) && cents > 0 && defaultPerKm != null && (
+              <p className="text-xs text-navy-500 dark:text-navy-300">
+                Exemplo: numa corrida de 5 km, a parte da distância fica {formatBRL(cents * 5)} (na automática seria {formatBRL(defaultPerKm * 5)}).
+              </p>
+            )}
+          </div>
+        )}
+        {err && <Banner tone="error" className="mt-2">{err}</Banner>}
+        <Button className="mt-3" loading={busy} onClick={save} data-testid="save-driver-preferences">
+          Salvar preferências
         </Button>
       </Card>
     </>

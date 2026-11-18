@@ -163,7 +163,21 @@ select tests.login('00000000-0000-0000-0000-0000000000d1');
 select tests.expect_error($$select public.advance_ride((select id from r1), 'em_andamento')$$, 'INVALID_TRANSITION');
 select public.advance_ride((select id from r1), 'motorista_a_caminho');
 select public.advance_ride((select id from r1), 'motorista_chegou');
+-- ========== PIN de embarque ==========
+select tests.eq((select pin_required from public.ride_requests where id = (select id from r1)), true, 'PIN ligado por padrão para o motorista');
+select tests.expect_error($$select public.advance_ride((select id from r1), 'em_andamento')$$, 'PIN_REQUIRED');
+select tests.expect_error($$select * from public.ride_pins$$, 'permission denied%');
+select tests.eq((public.get_ride_details((select id from r1)) ->> 'pin'), null, 'motorista não recebe o PIN');
+select tests.eq((public.verify_ride_pin((select id from r1), 'abcd') ->> 'ok')::boolean, false, 'PIN errado recusado');
+select tests.login('00000000-0000-0000-0000-0000000000a1');
+create temp table pin1 as select public.get_ride_details((select id from r1)) ->> 'pin' as pin;
+select tests.eq((select pin ~ '^[0-9]{4}$' from pin1), true, 'passageira vê PIN de 4 dígitos');
+select tests.login('00000000-0000-0000-0000-0000000000d1');
+select tests.eq((public.verify_ride_pin((select id from r1), (select pin from pin1)) ->> 'ok')::boolean, true, 'PIN certo libera o embarque');
 select public.advance_ride((select id from r1), 'em_andamento');
+select tests.login('00000000-0000-0000-0000-0000000000a1');
+select tests.eq((public.get_ride_details((select id from r1)) ->> 'pin'), null, 'PIN some depois que a corrida começa');
+select tests.login('00000000-0000-0000-0000-0000000000d1');
 select tests.login('00000000-0000-0000-0000-0000000000a1');
 select tests.expect_error($$select public.cancel_ride((select id from r1), 'quero sair')$$, 'INVALID_TRANSITION');
 select tests.login('00000000-0000-0000-0000-0000000000d1');
@@ -204,6 +218,40 @@ reset role;
 update public.ride_requests set search_expires_at = now() - interval '1 second' where id = (select id from r2);
 select tests.eq(public.expire_stale_rides(), 1, 'expira busca vencida');
 select tests.eq((select status::text from public.ride_requests where id = (select id from r2)), 'expirada', 'status expirada');
+
+-- ========== Preço por km do motorista + corrida direcionada ==========
+set role authenticated;
+select tests.login('00000000-0000-0000-0000-0000000000d2');
+select tests.expect_error($$select public.set_driver_preferences(false, 'proprio', 5)$$, 'PRICE_OUT_OF_RANGE');
+select public.set_driver_preferences(false, 'proprio', 300);
+select tests.login('00000000-0000-0000-0000-0000000000a1');
+create temp table q4 as select * from public.quote_ride_simulated(-23.1530, -47.0577, -23.1700, -47.0800);
+create temp table prices as select * from public.list_driver_prices((select id from q4), -23.1530, -47.0577);
+select tests.eq((select count(*) from prices)::int, 2, 'passageira vê os 2 motoristas disponíveis');
+select tests.eq((select per_km_cents from prices where driver_id = '00000000-0000-0000-0000-0000000000d2'), 300, 'preço próprio da Dora');
+select tests.eq((select per_km_cents from prices where driver_id = '00000000-0000-0000-0000-0000000000d1'), 200, 'Davi na tarifa automática');
+select tests.eq((select total_cents from prices where driver_id = '00000000-0000-0000-0000-0000000000d2') >
+                (select total_cents from prices where driver_id = '00000000-0000-0000-0000-0000000000d1'), true, 'preço maior por km = total maior');
+select tests.expect_error($$select public.request_ride((select id from q4), -23.1530, -47.0577, 'Rua A, 1, Centro', 10, 'Rua B, 2, Bairro', null,
+  '00000000-0000-0000-0000-0000000000d2', 1)$$, 'PRICE_CHANGED');
+create temp table r4 as select public.request_ride((select id from q4), -23.1530, -47.0577, 'Rua A, 1, Centro', 10, 'Rua B, 2, Bairro', null,
+  '00000000-0000-0000-0000-0000000000d2', (select total_cents from prices where driver_id = '00000000-0000-0000-0000-0000000000d2')) as id;
+select tests.eq((select price_source from public.ride_requests where id = (select id from r4)), 'motorista', 'corrida no preço do motorista');
+select tests.eq((select total_cents from public.ride_requests where id = (select id from r4)),
+                (select total_cents from prices where driver_id = '00000000-0000-0000-0000-0000000000d2'), 'total igual ao mostrado');
+select tests.login('00000000-0000-0000-0000-0000000000d1');
+select tests.eq((select count(*) from public.list_open_rides() where ride_id = (select id from r4))::int, 0, 'outro motorista não vê corrida direcionada');
+select tests.eq((public.accept_ride((select id from r4)) ->> 'accepted')::boolean, false, 'outro motorista não aceita corrida direcionada');
+select tests.login('00000000-0000-0000-0000-0000000000d2');
+select tests.eq((select targeted from public.list_open_rides() where ride_id = (select id from r4)), true, 'motorista escolhido vê a oferta');
+select public.decline_ride((select id from r4));
+select tests.eq((select status::text from public.ride_requests where id = (select id from r4) ), null, 'motorista não vê linha antes de aceitar');
+reset role;
+select tests.eq((select status::text from public.ride_requests where id = (select id from r4)), 'expirada', 'recusa do escolhido encerra a busca na hora');
+set role authenticated;
+select tests.login('00000000-0000-0000-0000-0000000000d2');
+select public.set_driver_preferences(true, 'automatico', null);
+reset role;
 
 -- ========== Tarifa versionada, sem retroatividade ==========
 set role authenticated;

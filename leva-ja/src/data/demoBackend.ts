@@ -20,6 +20,9 @@ import {
   type Backend,
   BackendError,
   type DriverLocation,
+  type DriverPreferences,
+  type DriverPriceOption,
+  type PinCheck,
   type DriverStatus,
   type FareConfigRow,
   type Invite,
@@ -52,6 +55,10 @@ interface DemoDriver {
   status: DriverStatus;
   isAvailable: boolean;
   vehicle: Vehicle | null;
+  // preferências (opcionais: bases antigas do modo demo não têm)
+  requirePin?: boolean;
+  priceMode?: 'automatico' | 'proprio';
+  perKmCents?: number | null;
 }
 interface DemoPixKey extends PixKeyInfo {
   ownerId: string;
@@ -60,6 +67,7 @@ interface DemoPixKey extends PixKeyInfo {
 interface DemoQuote extends Quote {
   passengerId: string;
   usedAt: string | null;
+  perKmCents?: number;
 }
 interface DemoPayment extends Payment {
   rideId: string;
@@ -88,6 +96,8 @@ export interface DemoDB {
   audit: AuditEntry[];
   settings: Record<string, unknown>;
   settingsHistory: SettingChange[];
+  /** PIN de embarque por corrida (nunca exposto ao motorista) */
+  pins?: Record<string, { pin: string; attempts: number }>;
 }
 
 export interface KV {
@@ -133,9 +143,19 @@ function defaultSettings(): Record<string, unknown> {
     map_defaults: { center: { lat: -23.153, lng: -47.0577 }, zoom: 14, region: 'BR', language: 'pt-BR' },
     service_area: { name: 'Itupeva/SP (aproximado — revisar)', polygon: [] },
     support_contact: null,
+    driver_custom_price_enabled: true,
+    driver_price_per_km_min_cents: 100,
+    driver_price_per_km_max_cents: 1000,
+    pin_max_attempts: 5,
   };
 }
-const PUBLIC_KEYS = ['pilot_mode', 'operations_enabled', 'passenger_invite_required', 'allow_simulated_routes', 'offer_timeout_seconds', 'offer_radius_km', 'pix_city', 'public_base_url', 'map_defaults', 'service_area', 'support_contact'];
+const PUBLIC_KEYS = ['pilot_mode', 'operations_enabled', 'passenger_invite_required', 'allow_simulated_routes', 'offer_timeout_seconds', 'offer_radius_km', 'pix_city', 'public_base_url', 'map_defaults', 'service_area', 'support_contact', 'driver_custom_price_enabled', 'driver_price_per_km_min_cents', 'driver_price_per_km_max_cents', 'pin_max_attempts'];
+
+function randomPin(): string {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return String(a[0] % 10000).padStart(4, '0');
+}
 
 async function seed(): Promise<DemoDB> {
   const pw = await sha256Hex(DEMO_PASSWORD);
@@ -459,7 +479,8 @@ export class DemoBackend implements Backend {
   async getPublicSettings(): Promise<PublicSettings> {
     const db = await this.load();
     const out: Record<string, unknown> = {};
-    for (const k of PUBLIC_KEYS) out[k] = db.settings[k];
+    const defs = defaultSettings();
+    for (const k of PUBLIC_KEYS) out[k] = db.settings[k] ?? defs[k];
     return out as unknown as PublicSettings;
   }
   async getActiveFare() {
@@ -507,7 +528,67 @@ export class DemoBackend implements Backend {
     });
   }
 
-  async requestRide(input: { quoteId: string; pickup: LatLng & { address: string; accuracyM: number | null }; destAddress: string; notes?: string }) {
+  /** preço por km efetivo do motorista (respeita a chave geral e os limites) */
+  private effectivePerKm(db: DemoDB, d: DemoDriver, def: number): number {
+    const set = { ...defaultSettings(), ...db.settings };
+    if (set.driver_custom_price_enabled === false || d.priceMode !== 'proprio' || d.perKmCents == null) return def;
+    return Math.min(Math.max(d.perKmCents, Number(set.driver_price_per_km_min_cents)), Number(set.driver_price_per_km_max_cents));
+  }
+  private eligibleDrivers(db: DemoDB, passengerId: string, pickup: LatLng) {
+    const radius = Number(db.settings.offer_radius_km ?? 15) * 1000;
+    return db.drivers
+      .filter((d) => d.isAvailable && d.status === 'aprovado' && d.userId !== passengerId)
+      .filter((d) => {
+        const loc = db.locations[d.userId];
+        return loc && Date.now() - Date.parse(loc.receivedAt) < 5 * 60_000 && haversineM(loc, pickup) <= radius;
+      })
+      .filter((d) => !db.rides.some((r) => r.driverId === d.userId && DRIVER_ACTIVE_STATUSES.includes(r.status)));
+  }
+  private quoteFare(db: DemoDB, q: DemoQuote) {
+    return db.fares.find((x) => x.version === q.fareVersion) ?? this.activeFare(db);
+  }
+
+  async listDriverPrices(quoteId: string, pickup: LatLng): Promise<DriverPriceOption[]> {
+    const s = this.requireUser();
+    const db = await this.load();
+    if (!this.hasRole(db, s.userId, 'passageiro')) throw new BackendError('FORBIDDEN');
+    const q = db.quotes.find((x) => x.id === quoteId && x.passengerId === s.userId);
+    if (!q) throw new BackendError('QUOTE_NOT_FOUND');
+    if (Date.parse(q.expiresAt) < Date.now()) throw new BackendError('QUOTE_EXPIRED');
+    const f = this.quoteFare(db, q);
+    const custom = db.settings.driver_custom_price_enabled !== false;
+    const rating = (userId: string) => {
+      const rs = db.ratings.filter((x) => x.rateeId === userId);
+      return rs.length ? Math.round((rs.reduce((a, b) => a + b.stars, 0) / rs.length) * 10) / 10 : null;
+    };
+    return this.eligibleDrivers(db, s.userId, pickup)
+      .map((d) => {
+        const perKm = this.effectivePerKm(db, d, f.perKmCents);
+        const u = db.users.find((x) => x.id === d.userId);
+        return {
+          driverId: d.userId,
+          name: u?.fullName.split(' ')[0] ?? 'Motorista',
+          rating: rating(d.userId),
+          vehicle: d.vehicle ? `${d.vehicle.make} ${d.vehicle.model} · ${d.vehicle.color}` : null,
+          distanceM: Math.round(haversineM(db.locations[d.userId], pickup) / 100) * 100,
+          priceMode: custom && d.priceMode === 'proprio' ? ('proprio' as const) : ('automatico' as const),
+          perKmCents: perKm,
+          totalCents: calcFare({ ...toConfig(f), perKmCents: perKm }, q.distanceM, q.durationS).totalCents,
+          requiresPin: d.requirePin !== false,
+        };
+      })
+      .sort((a, b) => a.totalCents - b.totalCents || a.distanceM - b.distanceM)
+      .slice(0, 20);
+  }
+
+  async requestRide(input: {
+    quoteId: string;
+    pickup: LatLng & { address: string; accuracyM: number | null };
+    destAddress: string;
+    notes?: string;
+    driverId?: string;
+    expectedTotalCents?: number;
+  }) {
     const s = this.requireUser();
     let offered: string[] = [];
     const id = await this.tx((db) => {
@@ -522,6 +603,19 @@ export class DemoBackend implements Backend {
       if (!this.inArea(db, input.pickup)) throw new BackendError('PICKUP_OUTSIDE_SERVICE_AREA');
       if (!this.inArea(db, q.dest)) throw new BackendError('DEST_OUTSIDE_SERVICE_AREA');
       if (db.rides.some((r) => r.passengerId === s.userId && ACTIVE_RIDE_STATUSES.includes(r.status))) throw new BackendError('PASSENGER_HAS_ACTIVE_RIDE');
+      // preço: tarifa automática ou o preço por km do motorista escolhido (recalculado aqui, nunca vindo do navegador)
+      const f = this.quoteFare(db, q);
+      let perKm = f.perKmCents;
+      let priceSource: Ride['priceSource'] = 'automatico';
+      if (input.driverId) {
+        const d = this.eligibleDrivers(db, s.userId, input.pickup).find((x) => x.userId === input.driverId);
+        if (!d) throw new BackendError('DRIVER_UNAVAILABLE');
+        perKm = this.effectivePerKm(db, d, f.perKmCents);
+        if (perKm !== f.perKmCents) priceSource = 'motorista';
+      }
+      const b = calcFare({ ...toConfig(f), perKmCents: perKm }, q.distanceM, q.durationS);
+      if (input.expectedTotalCents != null && input.expectedTotalCents !== b.totalCents) throw new BackendError('PRICE_CHANGED');
+      Object.assign(q, { perKmCents: perKm, distanceCents: b.distanceCents, subtotalCents: b.subtotalCents, totalCents: b.totalCents, commissionCents: b.commissionCents, driverNetCents: b.driverNetCents });
       q.usedAt = now();
       const ride: Ride = {
         id: uid(),
@@ -536,6 +630,10 @@ export class DemoBackend implements Backend {
         driverNetCents: q.driverNetCents,
         manualPrice: false,
         isSimulation: db.settings.pilot_mode !== false,
+        targetDriverId: input.driverId ?? null,
+        priceSource,
+        pinRequired: false,
+        pinVerifiedAt: null,
         cancelReason: null,
         cancelledBy: null,
         searchExpiresAt: new Date(Date.now() + Number(db.settings.offer_timeout_seconds ?? 180) * 1000).toISOString(),
@@ -549,19 +647,17 @@ export class DemoBackend implements Backend {
       };
       (ride as Ride & { quoteId: string }).quoteId = q.id;
       db.rides.unshift(ride);
+      (db.pins ??= {})[ride.id] = { pin: randomPin(), attempts: 0 };
       this.event(db, ride.id, null, 'solicitada', 'passageiro');
       ride.status = 'procurando_motorista';
       this.event(db, ride.id, 'solicitada', 'procurando_motorista', 'sistema');
-      const radius = Number(db.settings.offer_radius_km ?? 15) * 1000;
-      offered = db.drivers
-        .filter((d) => d.isAvailable && d.status === 'aprovado' && d.userId !== s.userId)
-        .filter((d) => {
-          const loc = db.locations[d.userId];
-          return loc && Date.now() - Date.parse(loc.receivedAt) < 5 * 60_000 && haversineM(loc, input.pickup) <= radius;
-        })
-        .filter((d) => !db.rides.some((r) => r.driverId === d.userId && DRIVER_ACTIVE_STATUSES.includes(r.status)))
-        .map((d) => d.userId);
-      for (const d of offered) this.notify(db, d, 'ride_offer', 'Nova solicitação de corrida', null, ride.id);
+      if (input.driverId) {
+        offered = [input.driverId];
+        this.notify(db, input.driverId, 'ride_offer', 'Um passageiro escolheu você', 'Corrida no seu preço por km.', ride.id);
+      } else {
+        offered = this.eligibleDrivers(db, s.userId, input.pickup).map((d) => d.userId);
+        for (const d of offered) this.notify(db, d, 'ride_offer', 'Nova solicitação de corrida', null, ride.id);
+      }
       return ride.id;
     });
     this.broadcast({ rideIds: [id], driverIds: [], userIds: offered });
@@ -594,10 +690,14 @@ export class DemoBackend implements Backend {
     const du = r.driverId ? db.users.find((u) => u.id === r.driverId) : null;
     const pu = db.users.find((u) => u.id === r.passengerId);
     const pay = db.payments.find((p) => p.rideId === id) ?? null;
+    const pinVisible = viewerRole === 'passageiro' && ['solicitada', 'procurando_motorista', 'aceita', 'motorista_a_caminho', 'motorista_chegou'].includes(r.status);
+    const fareRow = q ? this.quoteFare(db, q) : null;
     return {
-      ride: r,
+      ride: { ...r, targetDriverId: r.targetDriverId ?? null, priceSource: r.priceSource ?? 'automatico', pinRequired: !!r.pinRequired, pinVerifiedAt: r.pinVerifiedAt ?? null },
       viewerRole,
+      pin: pinVisible ? (db.pins?.[id]?.pin ?? null) : null,
       fare: {
+        perKmCents: q?.perKmCents ?? fareRow?.perKmCents ?? 0,
         version: q?.fareVersion ?? 0,
         pricingMode: q?.pricingMode ?? 'fixa_na_solicitacao',
         distanceM: q?.distanceM ?? 0,
@@ -646,7 +746,11 @@ export class DemoBackend implements Backend {
         if (!canTransition(r.status, 'procurando_motorista', actor)) throw new BackendError('INVALID_TRANSITION');
         this.event(db, r.id, r.status, 'procurando_motorista', actor, reason);
         db.assignments.push({ rideId: r.id, driverId: s.userId, outcome: 'desistiu' });
-        Object.assign(r, { status: 'procurando_motorista', driverId: null, acceptedAt: null, searchExpiresAt: new Date(Date.now() + Number(db.settings.offer_timeout_seconds ?? 180) * 1000).toISOString() });
+        Object.assign(r, { status: 'procurando_motorista', driverId: null, acceptedAt: null, pinRequired: false, pinVerifiedAt: null, searchExpiresAt: new Date(Date.now() + Number(db.settings.offer_timeout_seconds ?? 180) * 1000).toISOString() });
+        if (r.targetDriverId) {
+          this.endTargeted(db, r, 'motorista_escolhido_desistiu');
+          return;
+        }
         this.notify(db, r.passengerId, 'ride_reoffered', 'O motorista desistiu', 'Estamos procurando outro motorista.', r.id);
         return;
       }
@@ -657,6 +761,14 @@ export class DemoBackend implements Backend {
       if (r.driverId && actor !== 'motorista') this.notify(db, r.driverId, 'ride_cancelled', 'Corrida cancelada', reason, r.id);
     });
     this.broadcast({ rideIds: [id], driverIds: [], userIds: affected });
+  }
+
+  /** Corrida direcionada que o motorista escolhido não vai fazer: encerra e avisa o passageiro na hora. */
+  private endTargeted(db: DemoDB, r: Ride, reason: string) {
+    if (r.status !== 'procurando_motorista') return;
+    this.event(db, r.id, 'procurando_motorista', 'expirada', 'sistema', reason);
+    r.status = 'expirada';
+    this.notify(db, r.passengerId, 'ride_expired', 'O motorista escolhido não pôde atender', 'Escolha outro motorista ou peça pela tarifa automática.', r.id);
   }
 
   async rateRide(id: string, stars: number, comment?: string) {
@@ -715,7 +827,13 @@ export class DemoBackend implements Backend {
     const d = db.drivers.find((x) => x.userId === s.userId);
     if (!d) throw new BackendError('FORBIDDEN');
     const k = db.pixKeys.find((x) => x.ownerId === s.userId && x.purpose === 'recebimento_motorista');
-    return { status: d.status, isAvailable: d.isAvailable, vehicle: d.vehicle, pixKey: k ? { type: k.type, value: k.value, holder: k.holder } : null };
+    return {
+      status: d.status,
+      isAvailable: d.isAvailable,
+      vehicle: d.vehicle,
+      pixKey: k ? { type: k.type, value: k.value, holder: k.holder } : null,
+      preferences: { requirePin: d.requirePin !== false, priceMode: d.priceMode ?? 'automatico', perKmCents: d.perKmCents ?? null },
+    };
   }
   async saveVehicle(v: Vehicle) {
     const s = this.requireUser();
@@ -735,6 +853,46 @@ export class DemoBackend implements Backend {
       db.pixKeys.push({ ...k, ownerId: s.userId, purpose: 'recebimento_motorista' });
       this.audit(db, s.userId, 'pix_key_saved', 'pix_key', s.userId, { type: k.type });
     });
+  }
+  async saveDriverPreferences(p: DriverPreferences) {
+    const s = this.requireUser();
+    await this.tx((db) => {
+      if (!this.hasRole(db, s.userId, 'motorista')) throw new BackendError('FORBIDDEN');
+      const d = db.drivers.find((x) => x.userId === s.userId);
+      if (!d) throw new BackendError('NOT_FOUND');
+      if (p.priceMode !== 'automatico' && p.priceMode !== 'proprio') throw new BackendError('INVALID_PRICE_MODE');
+      if (p.priceMode === 'proprio') {
+        const set = { ...defaultSettings(), ...db.settings };
+        if (set.driver_custom_price_enabled === false) throw new BackendError('CUSTOM_PRICE_DISABLED');
+        const v = p.perKmCents;
+        if (v == null || !Number.isInteger(v) || v < Number(set.driver_price_per_km_min_cents) || v > Number(set.driver_price_per_km_max_cents)) throw new BackendError('PRICE_OUT_OF_RANGE');
+        d.perKmCents = v;
+      }
+      d.requirePin = p.requirePin;
+      d.priceMode = p.priceMode;
+    });
+  }
+  async verifyRidePin(rideId: string, pin: string): Promise<PinCheck> {
+    const s = this.requireUser();
+    return this.tx(
+      (db) => {
+        const r = db.rides.find((x) => x.id === rideId);
+        if (!r || r.driverId !== s.userId) throw new BackendError('FORBIDDEN');
+        if (r.status !== 'motorista_a_caminho' && r.status !== 'motorista_chegou') throw new BackendError('INVALID_TRANSITION');
+        const max = Number(db.settings.pin_max_attempts ?? 5);
+        if (r.pinVerifiedAt || !r.pinRequired) return { ok: true, locked: false, attemptsLeft: max };
+        const k = db.pins?.[rideId];
+        if (!k) throw new BackendError('NOT_FOUND');
+        if (k.attempts >= max) return { ok: false, locked: true, attemptsLeft: 0 };
+        if (pin === k.pin) {
+          r.pinVerifiedAt = now();
+          return { ok: true, locked: false, attemptsLeft: max - k.attempts };
+        }
+        k.attempts += 1;
+        return { ok: false, locked: k.attempts >= max, attemptsLeft: Math.max(0, max - k.attempts) };
+      },
+      { rideIds: [rideId], driverIds: [], userIds: [] },
+    );
   }
   async setAvailability(available: boolean) {
     const s = this.requireUser();
@@ -792,10 +950,13 @@ export class DemoBackend implements Backend {
       const radius = Number(db.settings.offer_radius_km ?? 15) * 1000;
       return db.rides
         .filter((r) => r.status === 'procurando_motorista' && r.passengerId !== s.userId)
+        .filter((r) => !r.targetDriverId || r.targetDriverId === s.userId)
         .filter((r) => !db.assignments.some((a) => a.rideId === r.id && a.driverId === s.userId && a.outcome !== 'aceita'))
-        .filter((r) => !loc || haversineM(loc, r.pickup) <= radius)
+        .filter((r) => r.targetDriverId === s.userId || !loc || haversineM(loc, r.pickup) <= radius)
+        .sort((a, b) => Number(b.targetDriverId === s.userId) - Number(a.targetDriverId === s.userId))
         .map((r) => {
           const q = db.quotes.find((x) => x.id === (r as Ride & { quoteId?: string }).quoteId);
+          const qf = q ? this.quoteFare(db, q) : this.activeFare(db);
           return {
             rideId: r.id,
             pickupArea: coarsen(r.pickup),
@@ -809,6 +970,9 @@ export class DemoBackend implements Backend {
             requestedAt: r.requestedAt ?? r.createdAt,
             searchExpiresAt: r.searchExpiresAt ?? r.createdAt,
             routeSource: q?.routeSource ?? 'simulada',
+            targeted: r.targetDriverId === s.userId,
+            priceSource: r.priceSource ?? 'automatico',
+            perKmCents: q?.perKmCents ?? qf.perKmCents,
           };
         });
     });
@@ -826,7 +990,10 @@ export class DemoBackend implements Backend {
       const r = db.rides.find((x) => x.id === id);
       // mesmo princípio do UPDATE condicional no Postgres: só aceita se AINDA estiver procurando
       if (!r || r.status !== 'procurando_motorista' || r.passengerId === s.userId) return { accepted: false, reason: 'ALREADY_TAKEN_OR_UNAVAILABLE' };
-      Object.assign(r, { status: 'aceita', driverId: s.userId, acceptedAt: now() });
+      if (r.targetDriverId && r.targetDriverId !== s.userId) return { accepted: false, reason: 'ALREADY_TAKEN_OR_UNAVAILABLE' };
+      Object.assign(r, { status: 'aceita', driverId: s.userId, acceptedAt: now(), pinRequired: d.requirePin !== false, pinVerifiedAt: null });
+      const pin = db.pins?.[id];
+      if (pin) pin.attempts = 0;
       db.assignments.push({ rideId: id, driverId: s.userId, outcome: 'aceita' });
       this.event(db, id, 'procurando_motorista', 'aceita', 'motorista');
       this.notify(db, r.passengerId, 'ride_accepted', 'Motorista confirmado', 'Seu motorista aceitou a corrida.', id);
@@ -838,9 +1005,14 @@ export class DemoBackend implements Backend {
   }
   async declineRide(id: string) {
     const s = this.requireUser();
-    await this.tx((db) => {
-      if (!db.assignments.some((a) => a.rideId === id && a.driverId === s.userId && a.outcome === 'recusada')) db.assignments.push({ rideId: id, driverId: s.userId, outcome: 'recusada' });
-    });
+    await this.tx(
+      (db) => {
+        if (!db.assignments.some((a) => a.rideId === id && a.driverId === s.userId && a.outcome === 'recusada')) db.assignments.push({ rideId: id, driverId: s.userId, outcome: 'recusada' });
+        const r = db.rides.find((x) => x.id === id);
+        if (r && r.targetDriverId === s.userId) this.endTargeted(db, r, 'motorista_escolhido_recusou');
+      },
+      { rideIds: [id], driverIds: [], userIds: [] },
+    );
   }
   async advanceRide(id: string, to: 'motorista_a_caminho' | 'motorista_chegou' | 'em_andamento' | 'finalizada') {
     const s = this.requireUser();
@@ -849,6 +1021,7 @@ export class DemoBackend implements Backend {
       const r = db.rides.find((x) => x.id === id);
       if (!r || r.driverId !== s.userId) throw new BackendError('FORBIDDEN');
       if (!canTransition(r.status, to, 'motorista')) throw new BackendError('INVALID_TRANSITION');
+      if (to === 'em_andamento' && r.pinRequired && !r.pinVerifiedAt) throw new BackendError('PIN_REQUIRED');
       this.event(db, id, r.status, to, 'motorista');
       r.status = to;
       if (to === 'motorista_chegou') r.arrivedAt = now();
@@ -858,7 +1031,7 @@ export class DemoBackend implements Backend {
         const q = db.quotes.find((x) => x.id === (r as Ride & { quoteId?: string }).quoteId);
         if (q?.pricingMode === 'variavel' && !r.manualPrice && r.startedAt) {
           const f = db.fares.find((x) => x.version === q.fareVersion) ?? this.activeFare(db);
-          const b = calcFare(toConfig(f), q.distanceM, (Date.now() - Date.parse(r.startedAt)) / 1000);
+          const b = calcFare({ ...toConfig(f), perKmCents: q.perKmCents ?? f.perKmCents }, q.distanceM, (Date.now() - Date.parse(r.startedAt)) / 1000);
           Object.assign(r, { totalCents: b.totalCents, commissionCents: b.commissionCents, driverNetCents: b.driverNetCents });
         }
         const pilot = db.settings.pilot_mode !== false;
@@ -1104,7 +1277,7 @@ export class DemoBackend implements Backend {
     getAllSettings: async () => {
       const db = await this.load();
       this.requireAdmin(db);
-      return { ...db.settings };
+      return { ...defaultSettings(), ...db.settings };
     },
     setSetting: async (key: string, value: unknown) => {
       await this.tx(
