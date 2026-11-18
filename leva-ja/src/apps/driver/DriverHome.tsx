@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { assessFix } from '../../core/geo';
 import { friendlyError } from '../../data/errors';
-import type { Offer } from '../../data/types';
+import type { Earnings, Offer } from '../../data/types';
 import { type MapMarker, MapView } from '../../maps/MapView';
-import { Badge, Banner, Button, Card, EmptyState, Skeleton, Toggle, useToast } from '../../ui/components';
+import { Badge, Banner, Button, Card, EmptyState, Skeleton, useToast } from '../../ui/components';
 import { formatBRL, formatDistance, formatDuration } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { useApp } from '../shared/AppContext';
@@ -19,6 +19,11 @@ export function DriverHome() {
   const [offers, setOffers] = useState<Offer[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [toggling, setToggling] = useState(false);
+  const [today, setToday] = useState<Earnings | null>(null);
+  useEffect(() => {
+    backend.getEarnings(1).then(setToday).catch(() => undefined);
+  }, [backend, d.activeRideId]);
 
   useEffect(() => {
     if (d.activeRideId) nav(`/corrida/${d.activeRideId}`, { replace: true });
@@ -112,6 +117,24 @@ export function DriverHome() {
           </Card>
         )}
 
+        {s.status === 'aprovado' && today && (
+          <Link to="/ganhos" className="block">
+            <div className="relative overflow-hidden rounded-[28px] bg-price-grad p-4 text-white shadow-float">
+              <div className="absolute -right-6 -top-8 h-28 w-28 rounded-full bg-lime-neon/30 blur-2xl" />
+              <div className="relative flex items-end justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-navy-100">Ganhos de hoje</p>
+                  <p className="text-3xl font-extrabold tabular-nums">{formatBRL(today.netCents)}</p>
+                  <p className="text-xs text-navy-100">{today.rides} corrida{today.rides === 1 ? '' : 's'} · líquido{settings?.pilot_mode ? ' simulado' : ''}</p>
+                </div>
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-grad text-navy-950 shadow-glow">
+                  <Icon name="wallet" />
+                </span>
+              </div>
+            </div>
+          </Link>
+        )}
+
         {s.status === 'aprovado' && (
           <Card className="shadow-sheet">
             {!d.consent ? (
@@ -126,13 +149,33 @@ export function DriverHome() {
               </div>
             ) : (
               <>
-                <Toggle
-                  checked={s.isAvailable}
-                  onChange={(v) => d.setAvailable(v)}
-                  disabled={missing.length > 0}
-                  label={s.isAvailable ? 'Disponível para corridas' : 'Indisponível'}
-                  description={missing.length ? `Cadastre: ${missing.join(' e ')}` : s.isAvailable ? 'Você está recebendo solicitações' : 'Ative para receber solicitações'}
-                />
+                <div className="flex flex-col items-center py-2">
+                  <div className="relative">
+                  {s.isAvailable && <span className="pointer-events-none absolute inset-0 animate-radar rounded-full bg-brand/35" />}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={s.isAvailable}
+                    aria-label={s.isAvailable ? 'Ficar offline' : 'Ficar online'}
+                    disabled={missing.length > 0 || toggling}
+                    onClick={async () => {
+                      setToggling(true);
+                      await d.setAvailable(!s.isAvailable);
+                      setToggling(false);
+                    }}
+                    className={`relative flex h-36 w-36 flex-col items-center justify-center rounded-full font-extrabold transition-all duration-300 active:scale-95 disabled:opacity-50 ${
+                      s.isAvailable ? 'bg-brand-grad text-navy-950 shadow-glow-lg' : 'bg-night-grad text-white shadow-float ring-4 ring-brand/40'
+                    }`}
+                  >
+                    <Icon name="steering" size={40} className={s.isAvailable ? 'relative animate-spin-slow' : 'relative'} />
+                    <span className="relative mt-1 text-lg leading-tight">{s.isAvailable ? 'ONLINE' : 'Ficar online'}</span>
+                  </button>
+                  </div>
+                  <p className="mt-3 text-center text-sm font-semibold">{s.isAvailable ? 'Disponível para corridas' : 'Indisponível'}</p>
+                  <p className="text-center text-xs text-navy-500 dark:text-navy-300">
+                    {missing.length ? `Cadastre: ${missing.join(' e ')}` : s.isAvailable ? 'Toque para ficar offline' : 'Toque para receber solicitações'}
+                  </p>
+                </div>
                 {s.isAvailable && (
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
                     <Badge tone={fixA && !fixA.stale ? 'green' : 'amber'}>{d.simulated ? 'GPS SIMULADO' : fixA ? fixA.label : 'Aguardando GPS…'}</Badge>
@@ -173,7 +216,7 @@ export function DriverHome() {
                 <Card key={o.rideId} className="animate-rise" data-testid="offer-card">
                   <div className="mb-2 flex items-start justify-between">
                     <div>
-                      <p className="text-2xl font-extrabold tabular-nums">{formatBRL(o.driverNetCents)}</p>
+                      <p className="bg-brand-grad bg-clip-text text-3xl font-extrabold tabular-nums text-transparent">{formatBRL(o.driverNetCents)}</p>
                       <p className="text-xs text-navy-500 dark:text-navy-300">
                         seu líquido · total {formatBRL(o.totalCents)} {settings?.pilot_mode && '(simulado)'}
                       </p>

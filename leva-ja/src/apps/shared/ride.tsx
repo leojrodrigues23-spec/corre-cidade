@@ -119,7 +119,8 @@ export function GpsBadge({ geo, label = 'Seu GPS' }: { geo: GeoState; label?: st
   return (
     <Badge tone={tone}>
       <span className={`h-2 w-2 rounded-full ${a.stale ? 'bg-red-500' : a.quality === 'bom' ? 'bg-brand' : 'bg-amber-500'}`} />
-      {label}: {a.label}
+      {label ? `${label}: ` : ''}
+      {a.label}
     </Badge>
   );
 }

@@ -16,7 +16,7 @@
     height: 100%;
   }
   body {
-    @apply bg-mist font-sans text-navy antialiased dark:bg-navy-950 dark:text-white;
+    @apply bg-mist font-sans text-navy antialiased dark:bg-navy-950 dark:bg-aurora dark:bg-fixed dark:text-white;
     overscroll-behavior-y: none;
   }
   @media (prefers-reduced-motion: reduce) {

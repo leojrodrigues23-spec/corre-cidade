@@ -30,7 +30,7 @@ export function AppProvider({ app, children }: { app: AppKind; children: ReactNo
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
-  const { pref, setPref } = useTheme(`levaja-theme-${app}`);
+  const { pref, setPref } = useTheme(`levaja-theme-${app}`, app === 'motorista' ? 'dark' : 'system');
   const [dark, setDark] = useState(document.documentElement.classList.contains('dark'));
 
   useEffect(() => {

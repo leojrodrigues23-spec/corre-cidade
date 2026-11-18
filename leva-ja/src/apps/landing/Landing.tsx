@@ -3,7 +3,7 @@ import { BrandSymbol, Icon } from '../../ui/icons';
 /** Landing pública: separa claramente os dois perfis. Sem publicidade, sem rastreadores. */
 export function Landing() {
   return (
-    <div className="min-h-dvh bg-navy text-white">
+    <div className="min-h-dvh bg-navy bg-aurora text-white">
       <div className="mx-auto max-w-5xl px-5 pb-safe pt-[calc(env(safe-area-inset-top)+1.5rem)]">
         <header className="flex items-center gap-2">
           <BrandSymbol size={34} />
@@ -16,7 +16,7 @@ export function Landing() {
         <section className="mt-8 grid items-center gap-8 md:grid-cols-2">
           <div className="animate-rise">
             <h1 className="text-4xl font-extrabold leading-tight md:text-5xl">
-              Seu destino <span className="text-brand">começa aqui!</span>
+              Seu destino <span className="bg-brand-grad bg-clip-text text-transparent">começa aqui!</span>
             </h1>
             <p className="mt-4 max-w-md text-navy-100">
               Mobilidade urbana simples e transparente. Nesta fase de testes o acesso é somente por convite, e as corridas e pagamentos são <strong>simulados</strong>.
@@ -68,7 +68,7 @@ function ProfileCard({ href, install, variant, title, text, cta }: { href: strin
         <h2 className="text-2xl font-extrabold">{title}</h2>
       </div>
       <p className="mb-5 flex-1 text-navy-600">{text}</p>
-      <a href={href} className="inline-flex h-12 items-center justify-center rounded-2xl bg-brand font-bold text-navy-950 transition hover:bg-brand-400">
+      <a href={href} className="inline-flex h-12 items-center justify-center rounded-2xl bg-brand-grad font-bold text-navy-950 shadow-glow transition hover:brightness-105">
         {cta}
       </a>
       <a href={install} className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-navy hover:bg-mist">

@@ -251,14 +251,15 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
     lng: c.lng - (dx * scale) / (111_320 * Math.cos((c.lat * Math.PI) / 180)),
   });
 
-  const grid = 64;
+  // cidade estilizada (puramente ilustrativa): quarteirões, praças e avenidas que acompanham o arraste
+  const grid = 128;
   const offX = (((size.w / 2 - (view.c.lng * 111_320 * Math.cos((view.c.lat * Math.PI) / 180)) / scale) % grid) + grid) % grid;
   const offY = (((size.h / 2 + (view.c.lat * 111_320) / scale) % grid) + grid) % grid;
 
   return (
     <div
       ref={box}
-      className={`${className?.includes('absolute') ? '' : 'relative'} touch-none select-none overflow-hidden bg-[#e8eef3] dark:bg-[#10263a] ${className ?? ''}`}
+      className={`${className?.includes('absolute') ? '' : 'relative'} touch-none select-none overflow-hidden bg-[#dfe8e2] dark:bg-[#0c2236] ${className ?? ''}`}
       role="application"
       aria-label="Mapa simulado"
       onPointerDown={(e) => {
@@ -277,11 +278,19 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
     >
       <svg width={size.w} height={size.h} className="absolute inset-0">
         <defs>
-          <pattern id="lj-grid" width={grid} height={grid} patternUnits="userSpaceOnUse" x={offX} y={offY}>
-            <path d={`M ${grid} 0 L 0 0 0 ${grid}`} fill="none" className="stroke-white dark:stroke-white/10" strokeWidth="6" />
+          <pattern id="lj-city" width={grid} height={grid} patternUnits="userSpaceOnUse" x={offX} y={offY}>
+            <rect width={grid} height={grid} className="fill-white dark:fill-[#1a3a5c]" />
+            <rect x="6" y="6" width="54" height="54" rx="8" className="fill-[#eef1f4] dark:fill-[#10304d]" />
+            <rect x="68" y="6" width="54" height="54" rx="8" className="fill-[#c9ecd2] dark:fill-[#0f3d3a]" />
+            <circle cx="95" cy="33" r="9" className="fill-[#b3e3c0] dark:fill-[#12504a]" />
+            <rect x="6" y="68" width="54" height="54" rx="8" className="fill-[#f3eee6] dark:fill-[#132f4a]" />
+            <rect x="68" y="68" width="54" height="54" rx="8" className="fill-[#eef1f4] dark:fill-[#10304d]" />
+            <rect x="14" y="14" width="18" height="14" rx="3" className="fill-[#e2e7ec] dark:fill-[#163a5c]" />
+            <rect x="78" y="80" width="22" height="16" rx="3" className="fill-[#e2e7ec] dark:fill-[#163a5c]" />
+            <path d={`M 0 ${grid - 1} H ${grid}`} className="stroke-[#ffd66b] dark:stroke-[#b8892a]" strokeWidth="3" opacity=".7" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#lj-grid)" />
+        <rect width="100%" height="100%" fill="url(#lj-city)" />
         {path && path.length > 1 && <polyline points={path.map((p) => `${project(p).x},${project(p).y}`).join(' ')} fill="none" stroke="#00C896" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="10 8" />}
         {markers.map((m) => {
           const p = project(shown[m.id] ?? m.position);
@@ -307,11 +316,10 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
           );
         })}
       {pickMode && <CenterPin />}
-      <div className="pointer-events-none absolute left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] -translate-x-1/2 rounded-full bg-fuchsia-600/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow">
-        Mapa simulado{reason ? '' : ' — Google Maps não configurado'}
+      <div className="pointer-events-none absolute left-3 top-[calc(env(safe-area-inset-top)+8.75rem)] rounded-full bg-fuchsia-600/85 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+        Mapa ilustrativo{reason ? '' : ' · sem Google Maps'}
       </div>
-      {reason && <div className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+6.5rem)] rounded-xl bg-white/90 p-2 text-center text-xs text-navy shadow">{reason}</div>}
-      <div className="pointer-events-none absolute bottom-1 right-2 text-[10px] text-navy-500">Grade ilustrativa · sem dados cartográficos</div>
+      {reason && <div className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+7rem)] rounded-xl bg-white/90 p-2 text-center text-xs text-navy shadow">{reason}</div>}
     </div>
   );
 }

@@ -8,7 +8,7 @@ export function cx(...c: (string | false | null | undefined)[]) {
 // ---------- Botões ----------
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'navy';
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-brand text-navy-950 hover:bg-brand-400 active:bg-brand-600 shadow-sm',
+  primary: 'bg-brand-grad text-navy-950 shadow-glow hover:brightness-105 hover:shadow-glow-lg active:brightness-95',
   navy: 'bg-navy text-white hover:bg-navy-800 active:bg-navy-950 dark:bg-white dark:text-navy dark:hover:bg-navy-100',
   secondary: 'bg-white text-navy ring-1 ring-navy/15 hover:bg-mist dark:bg-navy-800 dark:text-white dark:ring-white/10 dark:hover:bg-navy-700',
   ghost: 'bg-transparent text-navy hover:bg-navy/5 dark:text-white dark:hover:bg-white/10',
@@ -67,7 +67,7 @@ export function Spinner({ className = '' }: { className?: string }) {
 // ---------- Superfícies ----------
 export function Card({ children, className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...rest} className={cx('rounded-3xl bg-white p-4 shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:ring-white/5', className)}>
+    <div {...rest} className={cx('rounded-[28px] bg-white p-4 shadow-card ring-1 ring-navy/5 dark:bg-navy-900/90 dark:ring-white/10 dark:backdrop-blur', className)}>
       {children}
     </div>
   );
@@ -183,7 +183,7 @@ export function Toggle({ checked, onChange, label, disabled, description }: { ch
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={cx('relative h-8 w-14 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2', checked ? 'bg-brand' : 'bg-navy/20 dark:bg-white/20')}
+        className={cx('relative h-8 w-14 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2', checked ? 'bg-brand-grad shadow-glow' : 'bg-navy/20 dark:bg-white/20')}
       >
         <span className={cx('absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all', checked ? 'left-7' : 'left-1')} />
       </button>
@@ -261,8 +261,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 // ---------- Tema claro/escuro ----------
 export type ThemePref = 'system' | 'light' | 'dark';
-export function useTheme(storageKey: string) {
-  const [pref, setPref] = useState<ThemePref>(() => (localStorage.getItem(storageKey) as ThemePref) || 'system');
+export function useTheme(storageKey: string, fallback: ThemePref = 'system') {
+  const [pref, setPref] = useState<ThemePref>(() => (localStorage.getItem(storageKey) as ThemePref) || fallback);
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => {

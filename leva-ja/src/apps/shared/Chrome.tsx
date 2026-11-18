@@ -59,17 +59,22 @@ export function TopBar({ title, variant, right, back }: { title?: string; varian
 
 export function BottomNav({ items }: { items: { to: string; label: string; icon: IconName }[] }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-navy/5 bg-white/95 pb-safe backdrop-blur dark:border-white/5 dark:bg-navy-900/95" aria-label="Navegação principal">
-      <div className="mx-auto flex max-w-md justify-around px-2 pt-1.5">
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)]" aria-label="Navegação principal">
+      <div className="pointer-events-auto mx-auto flex max-w-sm justify-between gap-1 rounded-full bg-navy-950/90 p-1.5 shadow-float ring-1 ring-white/10 backdrop-blur-xl">
         {items.map((i) => (
           <NavLink
             key={i.to}
             to={i.to}
             end={i.to === '/'}
-            className={({ isActive }) => cx('flex min-w-[64px] flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-[11px] font-semibold transition', isActive ? 'text-brand-700 dark:text-brand' : 'text-navy-500 dark:text-navy-300')}
+            className={({ isActive }) =>
+              cx(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[12px] font-bold transition-all duration-300',
+                isActive ? 'bg-brand-grad text-navy-950 shadow-glow' : 'text-navy-100 hover:text-white',
+              )
+            }
           >
-            <Icon name={i.icon} size={22} />
-            {i.label}
+            <Icon name={i.icon} size={20} />
+            <span>{i.label}</span>
           </NavLink>
         ))}
       </div>

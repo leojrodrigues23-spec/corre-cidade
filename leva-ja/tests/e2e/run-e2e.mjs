@@ -80,7 +80,7 @@ try {
     await driver.getByTestId('demo-ribbon').waitFor();
     await driver.getByRole('button', { name: 'Entrar como motorista demo' }).click();
     await driver.getByRole('button', { name: 'Autorizar e continuar' }).click();
-    await driver.getByRole('switch').click();
+    await driver.getByRole('switch', { name: 'Ficar online' }).click();
     await driver.getByText('Disponível para corridas').waitFor();
     await driver.getByText(/Enviado há/).waitFor({ timeout: 15000 });
     await driver.screenshot({ path: `${shots}/02-motorista-disponivel.png` });
@@ -99,7 +99,7 @@ try {
   await step('passageiro: busca, confirma embarque, vê preço e solicita', async () => {
     await pass.getByRole('button', { name: 'Entrar como passageira demo' }).click();
     await pass.getByRole('button', { name: 'Permitir localização' }).click();
-    await pass.getByText(/Você: GPS bom/).waitFor({ timeout: 10000 });
+    await pass.getByText(/GPS bom/).first().waitFor({ timeout: 10000 });
     await pass.getByTestId('open-search').click();
     await pass.getByTestId('dest-input').fill('Estação');
     await pass.getByText(/Ponto de teste B/).click();

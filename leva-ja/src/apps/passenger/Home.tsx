@@ -8,7 +8,7 @@ import { type MapMarker, MapView } from '../../maps/MapView';
 import { resolveSuggestion, reverseGeocode, searchPlaces, type Suggestion } from '../../maps/places';
 import { Banner, Button, Card, IconButton, Input, Skeleton, Textarea, useToast } from '../../ui/components';
 import { formatBRL, formatDistance, formatDuration } from '../../ui/format';
-import { Icon } from '../../ui/icons';
+import { BrandSymbol, Icon } from '../../ui/icons';
 import { useApp } from '../shared/AppContext';
 import { FareBreakdown, GpsBadge, GpsWarnings, PlaceLine } from '../shared/ride';
 
@@ -26,6 +26,7 @@ export function PassengerHome() {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recent, setRecent] = useState<Place[]>([]);
 
   const consent = !!profile?.locationConsentAt;
   const geo = useGeolocation({ enabled: consent });
@@ -34,6 +35,21 @@ export function PassengerHome() {
   // recupera corrida ativa após recarregar/fechar o app
   useEffect(() => {
     backend.getActiveRideId().then((id) => id && nav(`/corrida/${id}`, { replace: true }));
+    // atalhos: últimos destinos de corridas finalizadas (sem duplicar)
+    backend
+      .listMyRides()
+      .then((rides) => {
+        const seen = new Set<string>();
+        const out: Place[] = [];
+        for (const r of rides) {
+          if (r.status !== 'finalizada' || seen.has(r.dest.address)) continue;
+          seen.add(r.dest.address);
+          out.push({ lat: r.dest.lat, lng: r.dest.lng, address: r.dest.address, label: r.dest.address.split(',')[0], source: 'mapa' });
+          if (out.length === 4) break;
+        }
+        setRecent(out);
+      })
+      .catch(() => undefined);
     backend.getProfile().then((p) => {
       setProfile(p);
       if (!p.locationConsentAt) setStep('consent');
@@ -133,11 +149,25 @@ export function PassengerHome() {
         dark={theme.dark}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 px-4 pt-[calc(env(safe-area-inset-top)+2.25rem)]">
-        <div className="pointer-events-auto">
-          <GpsBadge geo={geo} label="Você" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-[calc(env(safe-area-inset-top)+2rem)]">
+        <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-[24px] bg-night-grad p-3 pr-2 text-white shadow-float ring-1 ring-white/10">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-grad text-lg font-extrabold text-navy-950 shadow-glow">
+            {(profile?.fullName || 'L').slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-extrabold leading-tight">Olá, {profile?.fullName?.split(' ')[0] || 'bem-vindo(a)'}!</p>
+            <div className="mt-1 [&>span]:bg-white/10 [&>span]:text-white">
+              <GpsBadge geo={geo} label="" />
+            </div>
+          </div>
+          {step !== 'idle' && step !== 'consent' ? (
+            <button onClick={reset} aria-label="Cancelar" className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 transition hover:bg-white/20">
+              <Icon name="close" size={20} />
+            </button>
+          ) : (
+            <BrandSymbol size={38} />
+          )}
         </div>
-        {step !== 'idle' && step !== 'consent' && <IconButton className="pointer-events-auto" icon="close" label="Cancelar" onClick={reset} />}
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20 mx-auto max-w-lg px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)]">
@@ -174,11 +204,56 @@ export function PassengerHome() {
 
           {step === 'idle' && (
             <div>
-              <p className="mb-3 text-xl font-extrabold">Para onde vamos?</p>
-              <button onClick={() => setStep('search')} className="flex h-14 w-full items-center gap-3 rounded-2xl bg-mist px-4 text-left text-navy-500 ring-1 ring-navy/10 transition hover:ring-brand dark:bg-navy-800 dark:text-navy-300 dark:ring-white/10" data-testid="open-search">
-                <Icon name="search" />
-                Buscar destino
+              <p className="text-2xl font-extrabold tracking-tight">
+                Para onde <span className="bg-brand-grad bg-clip-text text-transparent">vamos?</span>
+              </p>
+              <p className="mb-3 text-sm text-navy-500 dark:text-navy-300">Preço completo antes de você confirmar.</p>
+              <button
+                onClick={() => setStep('search')}
+                className="group flex h-14 w-full items-center gap-3 rounded-2xl bg-brand-grad p-[2px] text-left shadow-glow transition active:scale-[.99]"
+                data-testid="open-search"
+              >
+                <span className="flex h-full w-full items-center gap-3 rounded-[14px] bg-white px-4 font-semibold text-navy-500 dark:bg-navy-900 dark:text-navy-100">
+                  <Icon name="search" className="text-brand-700 dark:text-brand" />
+                  Buscar destino
+                  <span className="ml-auto flex h-8 w-8 items-center justify-center rounded-xl bg-brand-grad text-navy-950">
+                    <Icon name="chevronRight" size={18} />
+                  </span>
+                </span>
               </button>
+              {recent.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-navy-500 dark:text-navy-300">Destinos recentes</p>
+                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                    {recent.map((r) => (
+                      <button
+                        key={r.address}
+                        onClick={() => startPickup(r)}
+                        className="flex max-w-[220px] shrink-0 items-center gap-2 rounded-2xl bg-mist px-3 py-2.5 text-left ring-1 ring-navy/5 transition hover:ring-brand dark:bg-navy-800 dark:ring-white/10"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-royal/10 text-royal dark:bg-royal-400/20 dark:text-royal-400">
+                          <Icon name="history" size={16} />
+                        </span>
+                        <span className="truncate text-sm font-semibold">{r.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {([
+                  ['money', 'Preço antes', 'bg-brand-50 text-brand-700 dark:bg-brand/15 dark:text-brand'],
+                  ['shield', 'Motorista aprovado', 'bg-royal/10 text-royal dark:bg-royal-400/20 dark:text-royal-400'],
+                  ['qr', 'Pix no final', 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-sun'],
+                ] as const).map(([icon, label, tone]) => (
+                  <div key={label} className="flex flex-col items-center gap-1.5 rounded-2xl bg-mist p-2.5 text-center dark:bg-navy-800">
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tone}`}>
+                      <Icon name={icon} size={18} />
+                    </span>
+                    <span className="text-[11px] font-bold leading-tight">{label}</span>
+                  </div>
+                ))}
+              </div>
               <div className="mt-3">
                 <GpsWarnings geo={geo} />
               </div>
@@ -214,16 +289,24 @@ export function PassengerHome() {
 
           {step === 'quote' && quote && pickup && dest && (
             <div>
-              <div className="mb-2 flex items-end justify-between">
-                <div>
-                  <p className="text-sm text-navy-500 dark:text-navy-300">
-                    {formatDistance(quote.distanceM)} · {formatDuration(quote.durationS)}
-                  </p>
-                  <p className="text-3xl font-extrabold tabular-nums" data-testid="quote-total">
-                    {formatBRL(quote.totalCents)}
-                  </p>
+              <div className="relative mb-3 overflow-hidden rounded-3xl bg-price-grad p-4 text-white shadow-float">
+                <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand/30 blur-2xl" />
+                <div className="relative flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-grad text-navy-950 shadow-glow">
+                    <Icon name="car" size={24} />
+                  </span>
+                  <div className="flex-1">
+                    <p className="font-extrabold">Leva Já Carro</p>
+                    <p className="text-xs text-navy-100">
+                      {formatDistance(quote.distanceM)} · {formatDuration(quote.durationS)} de viagem
+                    </p>
+                  </div>
+                  {settings?.pilot_mode && <span className="rounded-full bg-sun px-2 py-0.5 text-[10px] font-extrabold uppercase text-navy-950">Simulação</span>}
                 </div>
-                {settings?.pilot_mode && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">Simulação</span>}
+                <p className="relative mt-3 text-4xl font-extrabold tabular-nums tracking-tight" data-testid="quote-total">
+                  {formatBRL(quote.totalCents)}
+                </p>
+                <p className="relative text-xs text-navy-100">{quote.pricingMode === 'variavel' ? 'Pode variar com o tempo real da viagem' : 'Preço fechado na solicitação'}</p>
               </div>
               <PlaceLine icon="pin" title="Embarque" text={pickup.address} />
               <PlaceLine icon="flag" title="Destino" text={dest.address} />
