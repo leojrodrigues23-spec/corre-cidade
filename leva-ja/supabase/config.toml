@@ -1,0 +1,13 @@
+# Configuração mínima para o Supabase CLI (supabase link / db push / functions deploy)
+project_id = "leva-ja"
+
+[functions.route-quote]
+verify_jwt = true
+
+[auth]
+site_url = "https://SEU-DOMINIO"
+additional_redirect_urls = ["https://SEU-DOMINIO/passageiro/", "https://SEU-DOMINIO/motorista/", "https://SEU-DOMINIO/admin/"]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true

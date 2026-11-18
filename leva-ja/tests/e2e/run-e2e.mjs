@@ -1,0 +1,194 @@
+// E2E em MODO DEMO LOCAL: passageiro e motorista em abas separadas do mesmo navegador
+// (BroadcastChannel = tempo real entre abas). Valida fluxo completo, manifests e escopos dos SWs.
+// Uso: npm run build && node tests/e2e/run-e2e.mjs
+import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const { chromium, devices } = createRequire(import.meta.url)('playwright');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const shots = resolve(root, 'tests/e2e/screenshots');
+mkdirSync(shots, { recursive: true });
+const PORT = 4183;
+const BASE = `http://localhost:${PORT}`;
+const ITUPEVA = { latitude: -23.153, longitude: -47.0577, accuracy: 12 };
+
+const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'pipe' });
+await new Promise((ok, fail) => {
+  const t = setTimeout(() => fail(new Error('preview não subiu')), 20000);
+  server.stdout.on('data', (d) => String(d).includes(String(PORT)) && (clearTimeout(t), ok()));
+});
+
+let failures = 0;
+const step = async (name, fn) => {
+  try {
+    await fn();
+    console.log('✔', name);
+  } catch (e) {
+    failures++;
+    console.error('✘', name, '\n   ', e.message.split('\n')[0]);
+  }
+};
+const expect = (c, m) => {
+  if (!c) throw new Error(m);
+};
+
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ ...devices['Pixel 7'], geolocation: ITUPEVA, permissions: ['geolocation'], locale: 'pt-BR' });
+const errors = [];
+ctx.on('weberror', (e) => errors.push(e.error().message));
+
+try {
+  await step('landing separa perfis', async () => {
+    const p = await ctx.newPage();
+    await p.goto(BASE + '/');
+    await p.getByRole('heading', { name: 'Sou Passageiro' }).waitFor();
+    await p.getByRole('heading', { name: 'Sou Motorista' }).waitFor();
+    expect((await p.locator('a[href="/passageiro/"]').count()) === 1, 'link passageiro');
+    expect((await p.locator('a[href="/motorista/"]').count()) === 1, 'link motorista');
+    await p.screenshot({ path: `${shots}/01-landing.png`, fullPage: true });
+    await p.close();
+  });
+
+  await step('manifests independentes (id/scope/start_url/nome/ícones)', async () => {
+    const p = await ctx.newPage();
+    const m1 = await (await p.goto(BASE + '/passageiro/manifest.webmanifest')).json();
+    const m2 = await (await p.goto(BASE + '/motorista/manifest.webmanifest')).json();
+    expect(m1.name === 'Leva Já' && m2.name === 'Leva Já Motorista', 'nomes');
+    expect(m1.id !== m2.id && m1.scope === '/passageiro/' && m2.scope === '/motorista/', 'escopos distintos');
+    expect(m1.start_url.startsWith(m1.scope) && m2.start_url.startsWith(m2.scope), 'start_url dentro do escopo');
+    for (const m of [m1, m2]) {
+      expect(m.display === 'standalone', 'standalone');
+      expect(m.icons.some((i) => i.sizes === '192x192') && m.icons.some((i) => i.sizes === '512x512') && m.icons.some((i) => i.purpose === 'maskable'), 'ícones');
+      for (const i of m.icons) expect((await p.goto(BASE + i.src)).ok(), 'ícone ' + i.src);
+    }
+    await p.close();
+  });
+
+  const driver = await ctx.newPage();
+  const pass = await ctx.newPage();
+
+  await step('SW do motorista registrado só no escopo /motorista/', async () => {
+    await driver.goto(BASE + '/motorista/');
+    const scope = await driver.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    expect(scope === `${BASE}/motorista/`, scope);
+  });
+
+  await step('motorista: login demo, consentimento e disponibilidade', async () => {
+    await driver.getByTestId('demo-ribbon').waitFor();
+    await driver.getByRole('button', { name: 'Entrar como motorista demo' }).click();
+    await driver.getByRole('button', { name: 'Autorizar e continuar' }).click();
+    await driver.getByRole('switch').click();
+    await driver.getByText('Disponível para corridas').waitFor();
+    await driver.getByText(/Enviado há/).waitFor({ timeout: 15000 });
+    await driver.screenshot({ path: `${shots}/02-motorista-disponivel.png` });
+  });
+
+  await step('SW do passageiro registrado só no escopo /passageiro/', async () => {
+    await pass.goto(BASE + '/passageiro/');
+    const scope = await pass.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    expect(scope === `${BASE}/passageiro/`, scope);
+  });
+
+  await step('sessões separadas por app (passageiro não herda login do motorista)', async () => {
+    await pass.getByRole('button', { name: 'Entrar como passageira demo' }).waitFor();
+  });
+
+  await step('passageiro: busca, confirma embarque, vê preço e solicita', async () => {
+    await pass.getByRole('button', { name: 'Entrar como passageira demo' }).click();
+    await pass.getByRole('button', { name: 'Permitir localização' }).click();
+    await pass.getByText(/Você: GPS bom/).waitFor({ timeout: 10000 });
+    await pass.getByTestId('open-search').click();
+    await pass.getByTestId('dest-input').fill('Estação');
+    await pass.getByText(/Ponto de teste B/).click();
+    await pass.getByTestId('confirm-pickup').click({ timeout: 10000 });
+    const total = await pass.getByTestId('quote-total').textContent({ timeout: 10000 });
+    expect(/R\$\s?\d+,\d{2}/.test(total), 'total ' + total);
+    await pass.getByText('Detalhamento do preço').waitFor();
+    await pass.screenshot({ path: `${shots}/03-passageiro-cotacao.png` });
+    await pass.getByTestId('request-ride').click();
+    await pass.getByTestId('searching').waitFor();
+    await pass.screenshot({ path: `${shots}/04-passageiro-procurando.png` });
+  });
+
+  await step('motorista recebe oferta em tempo real (só região aproximada) e aceita', async () => {
+    await driver.getByTestId('offer-card').waitFor({ timeout: 15000 });
+    await driver.getByText('Endereço exato liberado após aceitar.', { exact: false }).waitFor();
+    await driver.screenshot({ path: `${shots}/05-motorista-oferta.png` });
+    await driver.getByTestId('accept-offer').click();
+    await driver.getByTestId('driver-advance').waitFor();
+  });
+
+  await step('passageiro vê motorista, veículo e posição ao vivo', async () => {
+    await pass.getByTestId('driver-card').waitFor({ timeout: 15000 });
+    await pass.getByText('DEM0A00').waitFor();
+    await pass.getByText(/Posição ao vivo|Aguardando a posição|Último sinal/).waitFor({ timeout: 15000 });
+    await pass.screenshot({ path: `${shots}/06-passageiro-motorista-a-caminho.png` });
+  });
+
+  await step('estado sobrevive a recarregar a página', async () => {
+    await pass.reload();
+    await pass.getByTestId('driver-card').waitFor({ timeout: 15000 });
+  });
+
+  await step('motorista: a caminho → chegou → iniciar → finalizar (com confirmação)', async () => {
+    for (const label of ['Estou a caminho', 'Cheguei', 'Iniciar corrida', 'Finalizar corrida', 'Confirmar: finalizar corrida']) {
+      const b = driver.getByTestId('driver-advance');
+      await driver.getByRole('button', { name: label }).waitFor({ timeout: 10000 });
+      await b.click();
+    }
+    await driver.getByText('Resumo financeiro (simulado)').waitFor({ timeout: 10000 });
+    await driver.screenshot({ path: `${shots}/07-motorista-finalizada.png`, fullPage: true });
+  });
+
+  await step('passageiro: recibo + Pix SIMULADO + informar pagamento', async () => {
+    await pass.getByTestId('pix-panel').waitFor({ timeout: 15000 });
+    await pass.getByText('SIMULAÇÃO — não pague').waitFor();
+    await pass.getByRole('button', { name: 'Ver QR Code de demonstração' }).click();
+    await pass.getByText('Simulação · não pague').waitFor();
+    await pass.getByRole('button', { name: 'Informar que paguei' }).click();
+    await pass.getByText('Passageiro informou pagamento').first().waitFor({ timeout: 10000 });
+    await pass.getByTestId('pix-panel').scrollIntoViewIfNeeded();
+    await pass.screenshot({ path: `${shots}/08-passageiro-pix-simulado.png` });
+  });
+
+  await step('motorista confirma recebimento manualmente', async () => {
+    await driver.getByRole('button', { name: 'Confirmar recebimento (manual)' }).click({ timeout: 15000 });
+    await driver.getByText('Confirmado manualmente').waitFor({ timeout: 10000 });
+  });
+
+  await step('passageiro avalia a corrida', async () => {
+    await pass.getByRole('radio', { name: '5 estrelas' }).click();
+    await pass.getByRole('button', { name: 'Enviar avaliação' }).click();
+    await pass.getByText('Obrigado!').waitFor();
+  });
+
+  await step('admin: MFA obrigatório, dashboard e distribuição sem URL pública', async () => {
+    const a = await ctx.newPage();
+    await a.setViewportSize({ width: 1280, height: 860 });
+    await a.goto(BASE + '/admin/');
+    await a.getByRole('button', { name: 'Entrar como admin demo' }).click();
+    await a.getByText('Verificação em duas etapas').waitFor();
+    await a.getByLabel('Código de 6 dígitos').fill('123456');
+    await a.getByRole('button', { name: 'Verificar' }).click();
+    await a.getByRole('heading', { name: 'Dashboard' }).waitFor();
+    await a.getByText('Finalizadas (30d)').waitFor();
+    await a.screenshot({ path: `${shots}/09-admin-dashboard.png` });
+    await a.getByRole('link', { name: 'Distribuição' }).click();
+    await a.getByText('Defina a URL pública primeiro').waitFor();
+    await a.getByRole('link', { name: 'Tarifas' }).click();
+    await a.getByText('Simulação: 6 km, 15 min').waitFor();
+    await a.getByText('R$ 22,25').first().waitFor();
+    await a.screenshot({ path: `${shots}/10-admin-tarifas.png` });
+    await a.close();
+  });
+
+  await step('sem erros de JavaScript nas páginas', async () => expect(errors.length === 0, errors.join(' | ')));
+} finally {
+  await browser.close();
+  server.kill();
+}
+console.log(failures ? `\n${failures} falha(s)` : '\nTodos os passos E2E passaram');
+process.exit(failures ? 1 : 0);

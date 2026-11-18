@@ -1,6 +1,22 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+// Carimba um BUILD_ID nos service workers: cada deploy muda o SW e dispara o aviso "Nova versão disponível".
+function stampServiceWorkers() {
+  const id = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  return {
+    name: 'levaja-stamp-sw',
+    apply: 'build' as const,
+    closeBundle() {
+      for (const app of ['passageiro', 'motorista']) {
+        const f = resolve(__dirname, 'dist', app, 'sw.js');
+        if (existsSync(f)) writeFileSync(f, readFileSync(f, 'utf8').replace('__BUILD_ID__', id));
+      }
+    },
+  };
+}
 
 // Uma única build gera 4 entradas HTML independentes:
 //   /            landing pública
@@ -9,7 +25,7 @@ import { resolve } from 'node:path';
 //   /admin/      painel administrativo (não instalável)
 // Cada PWA tem manifest e service worker próprios em public/<perfil>/.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), stampServiceWorkers()],
   build: {
     target: 'es2020',
     rollupOptions: {
@@ -24,5 +40,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    testTimeout: 15000,
   },
 } as never);

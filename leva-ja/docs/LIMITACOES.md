@@ -1,0 +1,8 @@
+# Limitações conhecidas (honestas) de um PWA
+
+1. **GPS em segundo plano / tela bloqueada:** navegadores suspendem `watchPosition` quando o app sai de foco — sempre no iPhone, frequentemente no Android. O app: (a) pede Wake Lock para manter a tela ligada quando suportado; (b) mostra "Localização desatualizada" ao motorista; (c) mostra ao passageiro "Último sinal há X" em vez de fingir posição ao vivo. Se o piloto exigir rastreamento contínuo, substituir `src/apps/driver/runtime.tsx` por um app nativo (Android/iOS) que use o mesmo RPC `push_driver_location`.
+2. **Precisão:** depende do aparelho e do ambiente. Exibimos raio de incerteza e classificação (bom/moderado/fraco/ruim); nunca prometemos precisão absoluta.
+3. **Notificações:** implementadas notificações no app (realtime) + notificação local pelo service worker enquanto o app está aberto/em segundo plano recente. **Web Push do servidor ainda não implementado** (precisa VAPID + Edge Function de envio). No iOS, notificações só existem com o app adicionado à Tela de Início (iOS 16.4+).
+4. **Instalação:** Android/Chrome mostra botão só quando o navegador dispara `beforeinstallprompt`; iPhone é sempre manual (Compartilhar → Adicionar à Tela de Início). QR Code só abre a URL.
+5. **Dois PWAs no mesmo aparelho:** escopos e `id` distintos permitem instalar ambos no Android/Chrome. No iOS cada "Adicionar à Tela de Início" é independente. **Precisa ser validado em aparelhos reais** (ver CHECKLIST_MANUAL.md).
+6. **Modo demo local:** os dados ficam no navegador; não sincroniza entre aparelhos diferentes. Para testar com dois telefones é necessário o Supabase configurado.
