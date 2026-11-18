@@ -62,4 +62,11 @@ Não são necessárias regras de rewrite (roteamento por `#/`).
 - Cada build carimba um novo `BUILD_ID` nos service workers → usuários veem "Nova versão disponível".
 - Migrações novas: sempre arquivos novos em `supabase/migrations` (+ `npm run test:sql`).
 - Tarifas e configurações mudam pelo painel, sem republicar.
-- Contas demo no Supabase (opcional): crie usuários pelo painel do Supabase e conceda papéis via SQL; marque-os claramente como "demo".
+- Contas demo no Supabase (opcional, só com Modo Piloto ligado), rodando **no seu computador**:
+  ```bash
+  SUPABASE_URL=https://xxxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=... npm run seed:demo
+  npm run seed:demo -- --dry-run            # mostra o que faria, sem conectar
+  npm run seed:demo -- --senha=MinhaSenha123  # senha escolhida (padrão: aleatória, exibida uma vez)
+  npm run seed:demo -- --remover            # remove (ou bloqueia, se já tiverem corridas)
+  ```
+  Cria passageiro, motorista (aprovado, veículo DEM0A00, chave Pix `.invalid`) e admin (TOTP no 1º acesso), todos com "DEMO" no nome.
