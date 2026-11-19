@@ -78,7 +78,7 @@ export function BottomNav({ items }: { items: { to: string; label: string; icon:
           >
             {({ isActive }) => (
               <>
-                {isActive && <span className="absolute top-0 h-1 w-10 rounded-b-full bg-brand-grad" />}
+                {isActive && <span className="absolute top-0 h-1 w-10 rounded-b-full bg-brand" />}
                 <Icon name={i.icon} size={22} />
                 <span>{i.label}</span>
               </>

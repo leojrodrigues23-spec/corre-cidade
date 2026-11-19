@@ -76,7 +76,7 @@ export function AuthScreen() {
   };
 
   return (
-    <div className="min-h-dvh bg-night-grad pb-safe"><div className="min-h-dvh bg-aurora pb-safe">
+    <div className="min-h-dvh bg-navy pb-safe"><div className="min-h-dvh pb-safe">
       <div className="mx-auto flex max-w-md flex-col px-5 pt-[calc(env(safe-area-inset-top)+3.5rem)]">
         <div className="mb-6 flex items-center gap-3 text-white">
           <BrandSymbol size={52} variant={app === 'motorista' ? 'motorista' : 'passageiro'} />

@@ -114,7 +114,7 @@ export function DriverRidePage() {
 
   return (
     <div className="min-h-dvh pb-28">
-      <div className="relative h-[42dvh]">
+      <div className="relative h-[56dvh]">
         <MapView className="absolute inset-0" center={ride.pickup} markers={markers} path={path} fitKey={`${ride.id}-${ride.status}`} dark={theme.dark} />
         <div className="absolute left-4 top-[calc(env(safe-area-inset-top)+2.25rem)]">
           <IconButton icon="chevronLeft" label="Início" onClick={() => nav('/')} />

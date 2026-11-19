@@ -30,7 +30,7 @@ export interface MapViewProps {
   compact?: boolean;
 }
 
-const COLORS = { pickup: '#00C896', dest: '#102A43', driver: '#00C896', me: '#2F80ED' };
+const COLORS = { pickup: '#FF5755', dest: '#31466F', driver: '#206178', me: '#38D1D5' };
 
 export function MapView(props: MapViewProps) {
   const [failed, setFailed] = useState<string | null>(null);
@@ -58,17 +58,17 @@ function markerIcon(kind: MapMarker['kind'], stale?: boolean): google.maps.Symbo
 /** Etiqueta em forma de pílula, desenhada como imagem para acompanhar o marcador no Google Maps. */
 function badgeIcon(text: string): google.maps.Icon {
   const w = Math.round(text.length * 7.4 + 22);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="28" viewBox="0 0 ${w} 28"><rect x="1" y="1" width="${w - 2}" height="26" rx="13" fill="#0A1B2C" stroke="#00C896" stroke-width="2"/><text x="${w / 2}" y="18.5" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="800" fill="#ffffff">${text.replace(/[<&>]/g, '')}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="28" viewBox="0 0 ${w} 28"><rect x="1" y="1" width="${w - 2}" height="26" rx="13" fill="#31466F" stroke="#38D1D5" stroke-width="2"/><text x="${w / 2}" y="18.5" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" font-weight="800" fill="#ffffff">${text.replace(/[<&>]/g, '')}</text></svg>`;
   // ancorado à esquerda do centro: a pílula fica à direita do carrinho
   return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(w, 28), anchor: new google.maps.Point(-26, 14) };
 }
 
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#132a3f' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#9fb3c8' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a1b2c' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#243b53' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a1b2c' }] },
+  { elementType: 'geometry', stylers: [{ color: '#1F2D4A' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#A9B3C8' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#18233B' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#31466F' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#18233B' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
 ];
 
@@ -168,7 +168,7 @@ function GoogleMap({ center, zoom = 15, markers, path, fitKey, pickMode, onPick,
   useEffect(() => {
     if (!ready || !map.current) return;
     line.current?.setMap(null);
-    line.current = path && path.length > 1 ? new google.maps.Polyline({ map: map.current, path, strokeColor: '#00C896', strokeWeight: 5, strokeOpacity: 0.9 }) : null;
+    line.current = path && path.length > 1 ? new google.maps.Polyline({ map: map.current, path, strokeColor: '#40C0CE', strokeWeight: 5, strokeOpacity: 0.9 }) : null;
   }, [path, ready]);
 
   useEffect(() => {
@@ -200,7 +200,7 @@ function CenterPin() {
   return (
     <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full" aria-hidden="true">
       <svg width="40" height="52" viewBox="0 0 36 46" className="drop-shadow-lg">
-        <path d="M18 1C8.6 1 1 8.6 1 18c0 12.4 15.2 25.4 16 26.1.6.5 1.4.5 2 0C19.8 43.4 35 30.4 35 18 35 8.6 27.4 1 18 1z" fill="#00C896" stroke="#fff" strokeWidth="2" />
+        <path d="M18 1C8.6 1 1 8.6 1 18c0 12.4 15.2 25.4 16 26.1.6.5 1.4.5 2 0C19.8 43.4 35 30.4 35 18 35 8.6 27.4 1 18 1z" fill="#FF5755" stroke="#fff" strokeWidth="2" />
         <circle cx="18" cy="18" r="6" fill="#fff" />
       </svg>
       <div className="mx-auto mt-0.5 h-1.5 w-3 rounded-full bg-navy/30" />
@@ -280,7 +280,7 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
   return (
     <div
       ref={box}
-      className={`${className?.includes('absolute') ? '' : 'relative'} touch-none select-none overflow-hidden bg-[#dfe8e2] dark:bg-[#0c2236] ${className ?? ''}`}
+      className={`${className?.includes('absolute') ? '' : 'relative'} touch-none select-none overflow-hidden bg-[#e3eef1] dark:bg-[#18233B] ${className ?? ''}`}
       role="application"
       aria-label="Mapa simulado"
       onPointerDown={(e) => {
@@ -300,19 +300,19 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
       <svg width={size.w} height={size.h} className="absolute inset-0">
         <defs>
           <pattern id="lj-city" width={grid} height={grid} patternUnits="userSpaceOnUse" x={offX} y={offY}>
-            <rect width={grid} height={grid} className="fill-white dark:fill-[#1a3a5c]" />
-            <rect x="6" y="6" width="54" height="54" rx="8" className="fill-[#eef1f4] dark:fill-[#10304d]" />
-            <rect x="68" y="6" width="54" height="54" rx="8" className="fill-[#c9ecd2] dark:fill-[#0f3d3a]" />
-            <circle cx="95" cy="33" r="9" className="fill-[#b3e3c0] dark:fill-[#12504a]" />
-            <rect x="6" y="68" width="54" height="54" rx="8" className="fill-[#f3eee6] dark:fill-[#132f4a]" />
-            <rect x="68" y="68" width="54" height="54" rx="8" className="fill-[#eef1f4] dark:fill-[#10304d]" />
-            <rect x="14" y="14" width="18" height="14" rx="3" className="fill-[#e2e7ec] dark:fill-[#163a5c]" />
-            <rect x="78" y="80" width="22" height="16" rx="3" className="fill-[#e2e7ec] dark:fill-[#163a5c]" />
-            <path d={`M 0 ${grid - 1} H ${grid}`} className="stroke-[#ffd66b] dark:stroke-[#b8892a]" strokeWidth="3" opacity=".7" />
+            <rect width={grid} height={grid} className="fill-white dark:fill-[#24355A]" />
+            <rect x="6" y="6" width="54" height="54" rx="8" className="fill-[#eef1f4] dark:fill-[#1F2D4A]" />
+            <rect x="68" y="6" width="54" height="54" rx="8" className="fill-[#e2f7f8] dark:fill-[#1a4256]" />
+            <circle cx="95" cy="33" r="9" className="fill-[#c4eff1] dark:fill-[#206178]" />
+            <rect x="6" y="68" width="54" height="54" rx="8" className="fill-[#f3eee6] dark:fill-[#1F2D4A]" />
+            <rect x="68" y="68" width="54" height="54" rx="8" className="fill-[#eef1f4] dark:fill-[#1F2D4A]" />
+            <rect x="14" y="14" width="18" height="14" rx="3" className="fill-[#e2e7ec] dark:fill-[#283A5E]" />
+            <rect x="78" y="80" width="22" height="16" rx="3" className="fill-[#e2e7ec] dark:fill-[#283A5E]" />
+            <path d={`M 0 ${grid - 1} H ${grid}`} className="stroke-[#ffffff] dark:stroke-[#31466F]" strokeWidth="3" opacity=".7" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#lj-city)" />
-        {path && path.length > 1 && <polyline points={path.map((p) => `${project(p).x},${project(p).y}`).join(' ')} fill="none" stroke="#00C896" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="10 8" />}
+        {path && path.length > 1 && <polyline points={path.map((p) => `${project(p).x},${project(p).y}`).join(' ')} fill="none" stroke="#40C0CE" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="10 8" />}
         {markers.map((m) => {
           const p = project(shown[m.id] ?? m.position);
           return m.accuracyM && (m.kind === 'driver' || m.kind === 'me') ? <circle key={`acc-${m.id}`} cx={p.x} cy={p.y} r={Math.max(6, m.accuracyM / scale)} fill={COLORS[m.kind]} fillOpacity="0.14" stroke={COLORS[m.kind]} strokeOpacity="0.5" /> : null;

@@ -4,11 +4,11 @@ import { assessFix } from '../../core/geo';
 import { friendlyError } from '../../data/errors';
 import type { Earnings, Offer } from '../../data/types';
 import { type MapMarker, MapView } from '../../maps/MapView';
-import { Badge, Banner, Button, Card, EmptyState, Skeleton, useToast } from '../../ui/components';
+import { Badge, Banner, Button, Card, Skeleton, useToast } from '../../ui/components';
 import { formatBRL, formatDistance, formatDuration } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { useApp } from '../shared/AppContext';
-import { BankHeader, HeaderIcon, Money, QuickActions, useHiddenValues } from '../shared/Bank';
+import { Money, useHiddenValues } from '../shared/Bank';
 import { GpsWarnings } from '../shared/ride';
 import { useDriver } from './runtime';
 
@@ -108,180 +108,85 @@ export function DriverHome() {
   const fixA = d.fix ? assessFix(d.fix, now) : null;
 
   return (
-    <div className="min-h-dvh pb-28">
-      <BankHeader
-        tone="motorista"
-        name={name}
-        hidden={hidden}
-        onToggleHidden={toggleHidden}
-        subtitle={
-          s.status === 'aprovado' ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${s.isAvailable ? 'bg-brand shadow-[0_0_8px_#00C896]' : 'bg-white/40'}`} />
-              {s.isAvailable ? 'Online · recebendo corridas' : 'Offline'}
-            </span>
-          ) : (
-            'Cadastro em análise'
-          )
-        }
-        right={<HeaderIcon icon="settings" label="Preferências" to="/perfil" />}
-      >
-        <Link to="/ganhos" className="flex items-end justify-between gap-3" aria-label="Ver ganhos">
-          <div>
-            <p className="text-[13px] font-semibold text-white/70">Ganhos de hoje{settings?.pilot_mode ? ' (simulado)' : ''}</p>
-            <Money cents={today?.netCents ?? 0} hidden={hidden} size="xl" className="mt-1 block" />
-            <p className="mt-1 text-xs text-white/60">
-              {today ? `${today.rides} corrida${today.rides === 1 ? '' : 's'} · líquido após comissão` : 'Carregando…'}
-            </p>
-          </div>
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
-            <Icon name="chevronRight" />
-          </span>
-        </Link>
-      </BankHeader>
-      <div className="relative z-10 mx-auto max-w-lg space-y-4 px-4 pt-5">
-        <QuickActions
-          items={[
-            { icon: 'wallet', label: 'Ganhos', to: '/ganhos', highlight: true },
-            { icon: 'receipt', label: 'Extrato', to: '/ganhos' },
-            { icon: 'money', label: 'Meu preço', to: '/perfil' },
-            { icon: 'shield', label: 'PIN', to: '/perfil' },
-            { icon: 'qr', label: 'Pix', to: '/perfil' },
-          ]}
-        />
-        {s.status !== 'aprovado' && (
-          <Card>
-            <div className="mb-2 flex items-center gap-2">
-              <Icon name="clock" className="text-amber-500" />
-              <p className="font-bold">{s.status === 'pendente' ? 'Cadastro em análise' : s.status === 'suspenso' ? 'Cadastro suspenso' : 'Acesso revogado'}</p>
-            </div>
-            <p className="mb-3 text-sm text-navy-600 dark:text-navy-100">
-              {s.status === 'pendente' ? 'O administrador precisa aprovar seu cadastro antes de você receber corridas. Complete os dados abaixo.' : 'Fale com o administrador do piloto.'}
-            </p>
-            <Checklist ok={!!s.vehicle} label="Dados do veículo e placa" />
-            <Checklist ok={!!s.pixKey} label="Chave Pix e nome do recebedor" />
-            <Link to="/perfil">
-              <Button block variant="secondary" className="mt-3">
-                Completar cadastro
-              </Button>
-            </Link>
-          </Card>
-        )}
+    <div className="relative h-dvh overflow-hidden">
+      <MapView className="absolute inset-0" center={center} zoom={14} markers={markers} fitKey={offers?.map((o) => o.rideId).join(',') || (d.fix ? 'me' : undefined)} dark={theme.dark} />
 
-        {s.status === 'aprovado' && (
-          <Card className="shadow-sheet">
-            {!d.consent ? (
-              <div>
-                <p className="mb-1 font-bold">Autorizar localização</p>
-                <p className="mb-3 text-sm text-navy-600 dark:text-navy-100">
-                  Sua posição é enviada somente enquanto você está disponível ou em corrida, e só é visível ao passageiro da sua corrida ativa e ao administrador. Ao ficar indisponível, a posição é apagada do servidor.
-                </p>
-                <Button block onClick={() => d.setConsent(true)}>
-                  Autorizar e continuar
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-col items-center py-2">
-                  <div className="relative">
-                  {s.isAvailable && <span className="pointer-events-none absolute inset-0 animate-radar rounded-full bg-brand/35" />}
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={s.isAvailable}
-                    aria-label={s.isAvailable ? 'Ficar offline' : 'Ficar online'}
-                    disabled={missing.length > 0 || toggling}
-                    onClick={async () => {
-                      setToggling(true);
-                      await d.setAvailable(!s.isAvailable);
-                      setToggling(false);
-                    }}
-                    className={`relative flex h-36 w-36 flex-col items-center justify-center rounded-full font-extrabold transition-all duration-300 active:scale-95 disabled:opacity-50 ${
-                      s.isAvailable ? 'bg-brand-grad text-navy-950 shadow-glow-lg' : 'bg-night-grad text-white shadow-float ring-4 ring-brand/40'
-                    }`}
-                  >
-                    <Icon name="steering" size={40} className={s.isAvailable ? 'relative animate-spin-slow' : 'relative'} />
-                    <span className="relative mt-1 text-lg leading-tight">{s.isAvailable ? 'ONLINE' : 'Ficar online'}</span>
-                  </button>
-                  </div>
-                  <p className="mt-3 text-center text-sm font-semibold">{s.isAvailable ? 'Disponível para corridas' : 'Indisponível'}</p>
-                  <p className="text-center text-xs text-navy-500 dark:text-navy-300">
-                    {missing.length ? `Cadastre: ${missing.join(' e ')}` : s.isAvailable ? 'Toque para ficar offline' : 'Toque para receber solicitações'}
-                  </p>
-                </div>
-                {s.isAvailable && (
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <Badge tone={fixA && !fixA.stale ? 'green' : 'amber'}>{d.simulated ? 'GPS SIMULADO' : fixA ? fixA.label : 'Aguardando GPS…'}</Badge>
-                    {d.lastSent && <Badge>{d.lastSent.accepted ? `Enviado há ${Math.round((now - d.lastSent.at) / 1000)}s` : `Posição não enviada: ${SEND_REASON[d.lastSent.reason ?? ''] ?? 'aguardando novo sinal'}`}</Badge>}
-                    <Badge tone={d.wakeLock ? 'green' : 'neutral'}>{d.wakeLock ? 'Tela mantida ligada' : 'Mantenha o app aberto'}</Badge>
-                  </div>
-                )}
-                {d.sendError && <Banner tone="error" className="mt-2">{d.sendError}</Banner>}
-                {s.isAvailable && !d.simulated && (
-                  <div className="mt-2">
-                    <GpsWarnings geo={d.geo} />
-                  </div>
-                )}
-                {backend.mode === 'demo' && s.isAvailable && (
-                  <label className="mt-3 flex items-center gap-2 rounded-xl bg-fuchsia-50 p-2 text-xs font-semibold text-fuchsia-900 dark:bg-fuchsia-950/50 dark:text-fuchsia-100">
-                    <input type="checkbox" checked={d.simulated} onChange={(e) => d.setSimulated(e.target.checked)} className="accent-fuchsia-600" data-testid="sim-gps" />
-                    Simulador de deslocamento (GPS fictício, apenas modo demo)
-                  </label>
-                )}
-              </>
-            )}
-          </Card>
-        )}
-
-        {s.isAvailable && (
-          <div className="overflow-hidden rounded-[28px] shadow-card ring-1 ring-navy/5 dark:ring-white/5">
-            <div className="relative h-52">
-              <MapView compact className="absolute inset-0" center={center} zoom={14} markers={markers} fitKey={offers?.map((o) => o.rideId).join(',') || (d.fix ? 'me' : undefined)} dark={theme.dark} />
-            </div>
-          </div>
-        )}
-
-        {s.isAvailable && (
-          <>
-            <div className="flex items-center justify-between px-1 pt-2">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-navy-500 dark:text-navy-300">Solicitações próximas</h2>
-              <button className="text-xs font-semibold text-brand-700 dark:text-brand" onClick={loadOffers}>
-                Atualizar
+      {/* topo mínimo: configurações, ganhos de hoje e GPS */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-[calc(env(safe-area-inset-top)+2.25rem)]">
+        <div className="mx-auto flex max-w-lg items-center justify-between gap-2">
+          <Link
+            to="/perfil"
+            aria-label="Configurações"
+            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-white text-base font-extrabold text-navy shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:text-white dark:ring-white/10"
+          >
+            {(name || 'M').slice(0, 1).toUpperCase()}
+          </Link>
+          {s.status === 'aprovado' && (
+            <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white py-1 pl-4 pr-1 shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:ring-white/10">
+              <Link to="/ganhos" className="flex items-baseline gap-1.5" aria-label="Ver ganhos" data-testid="today-earnings">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-navy-500 dark:text-navy-300">Ganhos de hoje</span>
+                <Money cents={today?.netCents ?? 0} hidden={hidden} size="sm" />
+              </Link>
+              <button onClick={toggleHidden} aria-label={hidden ? 'Mostrar valores' : 'Esconder valores'} className="flex h-9 w-9 items-center justify-center rounded-full text-navy-500 hover:bg-navy/5 dark:text-navy-300 dark:hover:bg-white/10">
+                <Icon name={hidden ? 'eyeOff' : 'eye'} size={18} />
               </button>
             </div>
-            {!offers && <Skeleton className="h-40" />}
-            {offers?.length === 0 && <EmptyState icon="car" title="Nenhuma solicitação no momento" text="Mantenha o app aberto. Avisaremos quando surgir uma corrida." />}
-            {offers?.map((o) => {
+          )}
+        </div>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-0 z-20 mx-auto max-w-lg px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)]">
+        <div className="max-h-[62dvh] space-y-2 overflow-y-auto">
+          {s.status !== 'aprovado' && (
+            <Card className="p-4">
+              <div className="mb-1 flex items-center gap-2">
+                <Icon name="clock" className="text-amber-500" />
+                <p className="font-bold">{s.status === 'pendente' ? 'Cadastro em análise' : s.status === 'suspenso' ? 'Cadastro suspenso' : 'Acesso revogado'}</p>
+              </div>
+              <p className="mb-2 text-sm text-navy-500 dark:text-navy-300">
+                {s.status === 'pendente' ? 'O administrador precisa aprovar seu cadastro. Complete os dados.' : 'Fale com o administrador do piloto.'}
+              </p>
+              <Checklist ok={!!s.vehicle} label="Dados do veículo e placa" />
+              <Checklist ok={!!s.pixKey} label="Chave Pix e nome do recebedor" />
+              <Link to="/perfil">
+                <Button block variant="secondary" className="mt-2">
+                  Completar cadastro
+                </Button>
+              </Link>
+            </Card>
+          )}
+
+          {s.isAvailable &&
+            offers?.map((o) => {
               const left = Math.max(0, Math.round((Date.parse(o.searchExpiresAt) - now) / 1000));
               return (
-                <Card key={o.rideId} className={`animate-rise ${o.targeted ? 'ring-2 ring-brand' : ''}`} data-testid="offer-card">
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {o.targeted ? (
-                      <Badge tone="green">Escolheu você · {formatBRL(o.perKmCents)}/km</Badge>
-                    ) : (
-                      <Badge tone="navy">Tarifa automática · {formatBRL(o.perKmCents)}/km</Badge>
-                    )}
-                  </div>
-                  <div className="mb-2 flex items-start justify-between">
+                <Card key={o.rideId} className={`animate-rise p-4 shadow-sheet ${o.targeted ? 'ring-2 ring-coral' : ''}`} data-testid="offer-card">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="bg-brand-grad bg-clip-text text-3xl font-extrabold tabular-nums text-transparent">{formatBRL(o.driverNetCents)}</p>
-                      <p className="text-xs text-navy-500 dark:text-navy-300">
-                        seu líquido · total {formatBRL(o.totalCents)} {settings?.pilot_mode && '(simulado)'}
+                      <p className="num text-[28px] font-extrabold leading-none">{formatBRL(o.driverNetCents)}</p>
+                      <p className="mt-1 text-xs text-navy-500 dark:text-navy-300">
+                        seu líquido · total {formatBRL(o.totalCents)}
+                        {settings?.pilot_mode && ' (simulado)'}
                       </p>
                     </div>
-                    <Badge tone={left < 30 ? 'red' : 'amber'}>expira em {left}s</Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge tone={left < 30 ? 'red' : 'amber'}>{left}s</Badge>
+                      {o.targeted ? <Badge tone="red">Escolheu você</Badge> : <Badge tone="navy">{formatBRL(o.perKmCents)}/km</Badge>}
+                    </div>
                   </div>
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <Icon name="pin" size={14} className="mr-1 inline text-brand" />
-                      Embarque: <strong>{o.pickupHint}</strong> {o.distanceToPickupM !== null && <span className="text-navy-500">· a {formatDistance(o.distanceToPickupM)}</span>}
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <p className="min-w-0 truncate">
+                      <Icon name="pin" size={14} className="mr-1 inline text-coral" />
+                      <strong>{o.pickupHint}</strong>
+                      {o.distanceToPickupM !== null && <span className="text-navy-500 dark:text-navy-300"> · {formatDistance(o.distanceToPickupM)}</span>}
                     </p>
-                    <p>
+                    <p className="min-w-0 truncate">
                       <Icon name="flag" size={14} className="mr-1 inline" />
-                      Destino: <strong>{o.destHint}</strong> · {formatDistance(o.routeDistanceM)} · {formatDuration(o.routeDurationS)}
+                      <strong>{o.destHint}</strong>
+                      <span className="text-navy-500 dark:text-navy-300"> · {formatDistance(o.routeDistanceM)} · {formatDuration(o.routeDurationS)}</span>
                     </p>
-                    <p className="text-xs text-navy-500">Endereço exato liberado após aceitar.{o.routeSource === 'simulada' && ' Rota simulada.'}</p>
                   </div>
+                  <p className="mt-1 text-[11px] text-navy-500 dark:text-navy-300">Endereço exato liberado após aceitar.{o.routeSource === 'simulada' && ' Rota simulada.'}</p>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <Button variant="secondary" onClick={async () => { await backend.declineRide(o.rideId); await loadOffers(); }}>
                       Recusar
@@ -293,8 +198,81 @@ export function DriverHome() {
                 </Card>
               );
             })}
-          </>
-        )}
+
+          {s.status === 'aprovado' && (
+            <Card className="p-4 shadow-sheet">
+              {!d.consent ? (
+                <div>
+                  <p className="font-bold">Autorizar localização</p>
+                  <p className="mb-3 mt-1 text-sm text-navy-500 dark:text-navy-300">
+                    Enviada só enquanto você está disponível ou em corrida, e vista apenas pelo passageiro da sua corrida e pelo administrador. Ao ficar offline, é apagada do servidor.
+                  </p>
+                  <Button block onClick={() => d.setConsent(true)}>
+                    Autorizar e continuar
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2 text-base font-extrabold">
+                        <span className={`h-2.5 w-2.5 rounded-full ${s.isAvailable ? 'bg-brand' : 'bg-navy-300'}`} />
+                        {s.isAvailable ? 'Você está online' : 'Você está offline'}
+                      </p>
+                      <p className="truncate text-xs text-navy-500 dark:text-navy-300">
+                        {missing.length
+                          ? `Cadastre: ${missing.join(' e ')}`
+                          : s.isAvailable
+                            ? offers?.length
+                              ? `${offers.length} solicitação(ões) perto de você`
+                              : 'Procurando corridas perto de você…'
+                            : 'Fique online para receber corridas'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={s.isAvailable}
+                      aria-label={s.isAvailable ? 'Ficar offline' : 'Ficar online'}
+                      disabled={missing.length > 0 || toggling}
+                      onClick={async () => {
+                        setToggling(true);
+                        await d.setAvailable(!s.isAvailable);
+                        setToggling(false);
+                      }}
+                      className={`h-12 shrink-0 rounded-full px-5 text-sm font-extrabold transition active:scale-95 disabled:opacity-50 ${
+                        s.isAvailable ? 'bg-mist text-navy ring-1 ring-navy/10 dark:bg-navy-800 dark:text-white dark:ring-white/10' : 'bg-coral text-white'
+                      }`}
+                    >
+                      {s.isAvailable ? 'Ficar offline' : 'Ficar online'}
+                    </button>
+                  </div>
+                  {s.isAvailable && (
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                      <Badge tone={fixA && !fixA.stale ? 'green' : 'amber'}>{d.simulated ? 'GPS SIMULADO' : fixA ? fixA.label : 'Aguardando GPS…'}</Badge>
+                      {d.lastSent && (
+                        <Badge>{d.lastSent.accepted ? `Enviado há ${Math.round((now - d.lastSent.at) / 1000)}s` : `Posição não enviada: ${SEND_REASON[d.lastSent.reason ?? ''] ?? 'aguardando novo sinal'}`}</Badge>
+                      )}
+                      {!d.wakeLock && <Badge>Mantenha o app aberto</Badge>}
+                    </div>
+                  )}
+                  {d.sendError && <Banner tone="error" className="mt-2">{d.sendError}</Banner>}
+                  {s.isAvailable && !d.simulated && (
+                    <div className="mt-2">
+                      <GpsWarnings geo={d.geo} />
+                    </div>
+                  )}
+                  {backend.mode === 'demo' && s.isAvailable && (
+                    <label className="mt-2 flex items-center gap-2 rounded-xl bg-fuchsia-50 p-2 text-[11px] font-semibold text-fuchsia-900 dark:bg-fuchsia-950/50 dark:text-fuchsia-100">
+                      <input type="checkbox" checked={d.simulated} onChange={(e) => d.setSimulated(e.target.checked)} className="accent-fuchsia-600" data-testid="sim-gps" />
+                      Simulador de deslocamento (GPS fictício, só no modo demo)
+                    </label>
+                  )}
+                </>
+              )}
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

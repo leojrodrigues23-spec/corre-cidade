@@ -42,6 +42,21 @@ export function ProfilePage({ extra }: { extra?: ReactNode }) {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-28">
+      {/* cartão de identificação, no estilo de configurações de banco */}
+      <div className="mt-2 flex items-center gap-4 rounded-[28px] bg-petrol p-5 text-white">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl font-extrabold">{(p?.fullName || name || 'L').slice(0, 1).toUpperCase()}</span>
+        <div className="min-w-0">
+          <p className="title truncate text-lg font-extrabold">{p?.fullName || 'Sua conta'}</p>
+          <p className="truncate text-sm text-white/75">{session?.email}</p>
+        </div>
+      </div>
+
+      <SectionTitle>Aparência</SectionTitle>
+      <Card>
+        <p className="mb-2 text-sm text-navy-500 dark:text-navy-300">Escolha o modo claro, o modo noturno ou siga o do celular.</p>
+        <ThemeSwitch pref={theme.pref} setPref={theme.setPref} />
+      </Card>
+
       <SectionTitle>Seus dados</SectionTitle>
       <Card>
         {!p ? (
@@ -51,7 +66,6 @@ export function ProfilePage({ extra }: { extra?: ReactNode }) {
           </div>
         ) : (
           <>
-            <p className="mb-3 text-sm text-navy-500 dark:text-navy-300">{session?.email}</p>
             <Field label="Nome">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
             <Field label="Celular">{(id) => <Input id={id} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />}</Field>
             <Button onClick={save} loading={busy}>
@@ -62,11 +76,6 @@ export function ProfilePage({ extra }: { extra?: ReactNode }) {
       </Card>
 
       {extra}
-
-      <SectionTitle>Aparência</SectionTitle>
-      <Card>
-        <ThemeSwitch pref={theme.pref} setPref={theme.setPref} />
-      </Card>
 
       <SectionTitle>Privacidade e permissões</SectionTitle>
       <Card className="space-y-3">

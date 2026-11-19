@@ -84,7 +84,7 @@ export function PassengerRidePage() {
 
   return (
     <div className="relative min-h-dvh">
-      <div className="relative h-[46dvh]">
+      <div className="relative h-[56dvh]">
         <MapView className="absolute inset-0" center={ride.pickup} markers={markers} path={path} fitKey={`${ride.id}-${ride.status}`} dark={theme.dark} />
         <div className="absolute left-4 top-[calc(env(safe-area-inset-top)+2.25rem)]">
           <IconButton icon="chevronLeft" label="Voltar" onClick={() => nav('/')} />
@@ -98,14 +98,14 @@ export function PassengerRidePage() {
           </div>
 
           {ride.status === 'procurando_motorista' && (
-            <div className="py-3 text-center" data-testid="searching">
-              <div className="relative mx-auto mb-4 flex h-28 w-28 items-center justify-center">
+            <div className="py-1 text-center" data-testid="searching">
+              <div className="relative mx-auto mb-3 flex h-20 w-20 items-center justify-center">
                 <span className="absolute inset-0 animate-radar rounded-full bg-brand/40" />
-                <span className="absolute inset-0 animate-radar rounded-full bg-lime-neon/30 [animation-delay:.8s]" />
-                <span className="absolute inset-0 animate-radar rounded-full bg-royal/25 [animation-delay:1.6s]" />
+                <span className="absolute inset-0 animate-radar rounded-full bg-brand/30 [animation-delay:.8s]" />
+                <span className="absolute inset-0 animate-radar rounded-full bg-petrol/20 [animation-delay:1.6s]" />
                 <span className="absolute inset-3 animate-spin-slow rounded-full border-2 border-dashed border-brand/50" />
-                <span className="relative flex h-16 w-16 animate-float items-center justify-center rounded-full bg-brand-grad text-navy-950 shadow-glow-lg">
-                  <Icon name="car" size={30} />
+                <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-petrol text-white">
+                  <Icon name="car" size={24} />
                 </span>
               </div>
               <p className="text-lg font-bold">{ride.targetDriverId ? 'Aguardando o motorista escolhido…' : 'Procurando motorista…'}</p>
@@ -116,7 +116,7 @@ export function PassengerRidePage() {
 
           {details.driver && tracking && (
             <div className="flex items-center gap-3 py-2" data-testid="driver-card">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-grad text-xl font-extrabold text-navy-950 shadow-glow">{details.driver.name.slice(0, 1)}</div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-xl font-extrabold text-navy-950 shadow-glow">{details.driver.name.slice(0, 1)}</div>
               <div className="min-w-0 flex-1">
                 <p className="font-bold">
                   {details.driver.name} {details.driver.rating && <span className="text-sm font-semibold text-amber-500">★ {details.driver.rating}</span>}
@@ -127,7 +127,7 @@ export function PassengerRidePage() {
                   </p>
                 )}
               </div>
-              {details.driver.vehicle && <span className="rounded-xl bg-night-grad px-2.5 py-1.5 font-mono text-sm font-bold tracking-wider text-white shadow-float ring-2 ring-brand/60">{details.driver.vehicle.plate}</span>}
+              {details.driver.vehicle && <span className="rounded-xl bg-navy px-2.5 py-1.5 font-mono text-sm font-bold tracking-wider text-white shadow-float ring-2 ring-brand/60">{details.driver.vehicle.plate}</span>}
             </div>
           )}
 

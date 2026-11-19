@@ -8,7 +8,7 @@ export function cx(...c: (string | false | null | undefined)[]) {
 // ---------- Botões ----------
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'navy';
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-brand-grad text-navy-950 shadow-glow hover:brightness-105 hover:shadow-glow-lg active:brightness-95',
+  primary: 'bg-coral text-white shadow-[0_6px_16px_-6px_rgba(255,87,85,.55)] hover:bg-coral-600 active:brightness-95',
   navy: 'bg-navy text-white hover:bg-navy-800 active:bg-navy-950 dark:bg-white dark:text-navy dark:hover:bg-navy-100',
   secondary: 'bg-white text-navy ring-1 ring-navy/15 hover:bg-mist dark:bg-navy-800 dark:text-white dark:ring-white/10 dark:hover:bg-navy-700',
   ghost: 'bg-transparent text-navy hover:bg-navy/5 dark:text-white dark:hover:bg-white/10',
@@ -84,9 +84,7 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
 
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
-    <div className={cx('relative overflow-hidden rounded-xl bg-navy/5 dark:bg-white/5', className)}>
-      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/60 to-transparent dark:via-white/10" />
-    </div>
+    <div className={cx('animate-pulse rounded-xl bg-navy/5 dark:bg-white/5', className)} />
   );
 }
 
@@ -183,7 +181,7 @@ export function Toggle({ checked, onChange, label, disabled, description }: { ch
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={cx('relative h-8 w-14 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2', checked ? 'bg-brand-grad shadow-glow' : 'bg-navy/20 dark:bg-white/20')}
+        className={cx('relative h-8 w-14 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2', checked ? 'bg-petrol dark:bg-brand' : 'bg-navy/20 dark:bg-white/20')}
       >
         <span className={cx('absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all', checked ? 'left-7' : 'left-1')} />
       </button>
@@ -279,21 +277,26 @@ export function useTheme(storageKey: string, fallback: ThemePref = 'system') {
 }
 
 export function ThemeSwitch({ pref, setPref }: { pref: ThemePref; setPref: (p: ThemePref) => void }) {
-  const opts: { v: ThemePref; label: string }[] = [
-    { v: 'system', label: 'Sistema' },
-    { v: 'light', label: 'Claro' },
-    { v: 'dark', label: 'Escuro' },
+  const opts: { v: ThemePref; label: string; icon: IconName }[] = [
+    { v: 'light', label: 'Claro', icon: 'sun' },
+    { v: 'dark', label: 'Noturno', icon: 'moon' },
+    { v: 'system', label: 'Automático', icon: 'settings' },
   ];
   return (
-    <div className="inline-flex rounded-2xl bg-mist p-1 ring-1 ring-navy/10 dark:bg-navy-800 dark:ring-white/10" role="radiogroup" aria-label="Tema">
+    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Tema">
       {opts.map((o) => (
         <button
           key={o.v}
           role="radio"
           aria-checked={pref === o.v}
           onClick={() => setPref(o.v)}
-          className={cx('rounded-xl px-3 py-1.5 text-sm font-semibold transition', pref === o.v ? 'bg-white text-navy shadow-sm dark:bg-navy-600 dark:text-white' : 'text-navy-500 dark:text-navy-300')}
+          data-testid={`theme-${o.v}`}
+          className={cx(
+            'flex flex-col items-center gap-1.5 rounded-2xl py-3 text-sm font-bold ring-2 transition',
+            pref === o.v ? 'bg-brand-50 text-petrol ring-brand dark:bg-petrol dark:text-white' : 'bg-mist text-navy-500 ring-transparent dark:bg-navy-800 dark:text-navy-300',
+          )}
         >
+          <Icon name={o.icon} size={22} />
           {o.label}
         </button>
       ))}

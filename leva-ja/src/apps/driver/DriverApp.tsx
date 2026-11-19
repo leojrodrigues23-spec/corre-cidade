@@ -110,7 +110,7 @@ function EarningsPage() {
         {settings?.pilot_mode && <Banner tone="warn">Valores simulados do piloto. Comissão é apenas calculada, não é cobrada automaticamente.</Banner>}
         <div className="inline-flex rounded-full bg-white p-1 shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:ring-white/10">
           {[1, 7, 30].map((d) => (
-            <button key={d} onClick={() => setDays(d)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${days === d ? 'bg-brand-grad text-navy-950 shadow-glow' : 'text-navy-500 dark:text-navy-300'}`}>
+            <button key={d} onClick={() => setDays(d)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${days === d ? 'bg-brand text-navy-950 shadow-glow' : 'text-navy-500 dark:text-navy-300'}`}>
               {d === 1 ? 'Hoje' : `${d} dias`}
             </button>
           ))}

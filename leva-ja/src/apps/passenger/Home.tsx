@@ -2,16 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { decodePolyline, haversineM, type LatLng } from '../../core/geo';
 import { errorCode, friendlyError } from '../../data/errors';
-import type { DriverPriceOption, Place, Profile, Quote, Ride } from '../../data/types';
+import type { DriverPriceOption, Place, Profile, Quote } from '../../data/types';
 import { useGeolocation } from '../../geo/useGeolocation';
 import { type MapMarker, MapView } from '../../maps/MapView';
 import { resolveSuggestion, reverseGeocode, searchPlaces, type Suggestion } from '../../maps/places';
-import { Banner, Button, Card, IconButton, Input, Modal, Skeleton, Textarea, useToast } from '../../ui/components';
+import { Banner, Button, Card, IconButton, Input, Skeleton, Textarea, useToast } from '../../ui/components';
 import { formatBRL, formatDistance, formatDuration } from '../../ui/format';
 import { Icon } from '../../ui/icons';
-import { RIDE_STATUS_LABEL } from '../../core/ride';
 import { useApp } from '../shared/AppContext';
-import { BankHeader, BankSection, HeaderIcon, Money, QuickActions, Statement, type StatementItem, useHiddenValues } from '../shared/Bank';
 import { FareBreakdown, GpsBadge, GpsWarnings, PlaceLine } from '../shared/ride';
 
 type Step = 'consent' | 'idle' | 'search' | 'pickup' | 'quote';
@@ -29,7 +27,6 @@ export function PassengerHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<Place[]>([]);
-  const [rides, setRides] = useState<Ride[] | null>(null);
   // modo de preço: tarifa automática (todos os motoristas) ou escolher um motorista pelo preço dele
   const [priceMode, setPriceMode] = useState<'automatico' | 'escolher'>('automatico');
   const [drivers, setDrivers] = useState<DriverPriceOption[] | null>(null);
@@ -68,7 +65,6 @@ export function PassengerHome() {
     backend
       .listMyRides()
       .then((rides) => {
-        setRides(rides);
         const seen = new Set<string>();
         const out: Place[] = [];
         for (const r of rides) {
@@ -185,26 +181,6 @@ export function PassengerHome() {
     setChosen(null);
   };
 
-  if (step === 'idle' || step === 'consent')
-    return (
-      <PassengerDashboard
-        profile={profile}
-        geo={geo}
-        rides={rides}
-        recent={recent}
-        askConsent={step === 'consent'}
-        onConsent={async (granted) => {
-          if (granted) {
-            await backend.setLocationConsent(true);
-            setProfile((p) => (p ? { ...p, locationConsentAt: new Date().toISOString() } : p));
-          }
-          setStep('idle');
-        }}
-        onSearch={() => setStep('search')}
-        onPick={startPickup}
-      />
-    );
-
   return (
     <div className="relative h-dvh overflow-hidden">
       <MapView
@@ -219,25 +195,86 @@ export function PassengerHome() {
         dark={theme.dark}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-[calc(env(safe-area-inset-top)+2rem)]">
-        <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-[24px] bg-night-grad p-3 pr-2 text-white shadow-float ring-1 ring-white/10">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-grad text-lg font-extrabold text-navy-950 shadow-glow">
-            {(profile?.fullName || 'L').slice(0, 1).toUpperCase()}
+      {/* topo mínimo: avatar (configurações), GPS e, durante o pedido, voltar */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-[calc(env(safe-area-inset-top)+2.25rem)]">
+        <div className="mx-auto flex max-w-lg items-center justify-between gap-2">
+          {step === 'idle' || step === 'consent' ? (
+            <Link
+              to="/perfil"
+              aria-label="Configurações"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-white text-base font-extrabold text-navy shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:text-white dark:ring-white/10"
+            >
+              {(profile?.fullName || 'L').slice(0, 1).toUpperCase()}
+            </Link>
+          ) : (
+            <button
+              onClick={reset}
+              aria-label="Cancelar"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-white text-navy shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:text-white dark:ring-white/10"
+            >
+              <Icon name="close" size={20} />
+            </button>
+          )}
+          <div className="pointer-events-auto rounded-full bg-white px-1 py-1 shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:ring-white/10">
+            <GpsBadge geo={geo} label="" />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-extrabold leading-tight">Olá, {profile?.fullName?.split(' ')[0] || 'bem-vindo(a)'}!</p>
-            <div className="mt-1 [&>span]:bg-white/10 [&>span]:text-white">
-              <GpsBadge geo={geo} label="" />
-            </div>
-          </div>
-          <button onClick={reset} aria-label="Cancelar" className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 transition hover:bg-white/20">
-            <Icon name="close" size={20} />
-          </button>
         </div>
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20 mx-auto max-w-lg px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)]">
-        <Card className="max-h-[62dvh] overflow-y-auto shadow-sheet animate-rise">
+        <Card className="max-h-[58dvh] overflow-y-auto p-4 shadow-sheet animate-rise">
+          {step === 'consent' && (
+            <div>
+              <p className="text-base font-extrabold">Usar sua localização?</p>
+              <p className="mb-3 mt-1 text-sm text-navy-500 dark:text-navy-300">Só para sugerir o embarque e mostrar o motorista chegando. Você pode revogar no Perfil.</p>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setStep('idle')}>
+                  Agora não
+                </Button>
+                <Button
+                  block
+                  onClick={async () => {
+                    await backend.setLocationConsent(true);
+                    setProfile((p) => (p ? { ...p, locationConsentAt: new Date().toISOString() } : p));
+                    setStep('idle');
+                  }}
+                >
+                  Permitir localização
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === 'idle' && (
+            <div>
+              <button
+                onClick={() => setStep('search')}
+                className="flex h-14 w-full items-center gap-3 rounded-2xl bg-mist px-4 text-left transition active:scale-[.99] dark:bg-navy-800"
+                data-testid="open-search"
+              >
+                <Icon name="search" className="text-petrol dark:text-brand" />
+                <span className="flex-1 text-[17px] font-extrabold">Para onde?</span>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-navy-500 shadow-sm dark:bg-navy-900 dark:text-navy-300">Agora</span>
+              </button>
+              {recent.length > 0 && (
+                <ul className="mt-1">
+                  {recent.slice(0, 2).map((r) => (
+                    <li key={r.address}>
+                      <button onClick={() => startPickup(r)} className="flex w-full items-center gap-3 py-2.5 text-left">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mist text-navy dark:bg-navy-800 dark:text-white">
+                          <Icon name="history" size={18} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold">{r.label}</span>
+                        <Icon name="chevronRight" size={16} className="text-navy-300" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <GpsWarnings geo={geo} />
+            </div>
+          )}
+
           {settings && !settings.operations_enabled && <Banner tone="warn" className="mb-3">Solicitações pausadas pelo administrador no momento.</Banner>}
 
           {step === 'search' && <DestinationSearch bias={myPos ?? defaults.center} onPick={startPickup} onBack={reset} />}
@@ -269,31 +306,29 @@ export function PassengerHome() {
 
           {step === 'quote' && quote && pickup && dest && (
             <div>
-              <div className="relative mb-3 overflow-hidden rounded-3xl bg-price-grad p-4 text-white shadow-float">
-                <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-brand/30 blur-2xl" />
-                <div className="relative flex items-center gap-3">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-grad text-navy-950 shadow-glow">
-                    <Icon name="car" size={24} />
-                  </span>
-                  <div className="flex-1">
-                    <p className="font-extrabold">Leva Já Carro</p>
-                    <p className="text-xs text-navy-100">
-                      {formatDistance(quote.distanceM)} · {formatDuration(quote.durationS)} de viagem
-                    </p>
-                  </div>
-                  {settings?.pilot_mode && <span className="rounded-full bg-sun px-2 py-0.5 text-[10px] font-extrabold uppercase text-navy-950">Simulação</span>}
+              {/* linha única: carro, distância/tempo e o preço em destaque */}
+              <div className="mb-3 flex items-center gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-petrol dark:bg-petrol dark:text-white">
+                  <Icon name="car" size={24} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 whitespace-nowrap font-extrabold">
+                    Leva Já Carro
+                    {settings?.pilot_mode && <span className="rounded-full bg-sun px-1.5 py-px text-[9px] font-extrabold uppercase text-navy-950">Simulação</span>}
+                  </p>
+                  <p className="truncate text-xs text-navy-500 dark:text-navy-300">
+                    {formatDistance(quote.distanceM)} · {formatDuration(quote.durationS)} ·{' '}
+                    {priceMode === 'escolher'
+                      ? chosen
+                        ? `${chosen.name} · ${formatBRL(chosen.perKmCents)}/km`
+                        : 'escolha um motorista'
+                      : quote.pricingMode === 'variavel'
+                        ? 'pode variar'
+                        : 'preço fechado'}
+                  </p>
                 </div>
-                <p className="relative mt-3 text-4xl font-extrabold tabular-nums tracking-tight" data-testid="quote-total">
+                <p className="num text-[28px] font-extrabold leading-none text-navy dark:text-white" data-testid="quote-total">
                   {formatBRL(priceMode === 'escolher' && chosen ? chosen.totalCents : quote.totalCents)}
-                </p>
-                <p className="relative text-xs text-navy-100">
-                  {priceMode === 'escolher'
-                    ? chosen
-                      ? `Preço de ${chosen.name}: ${formatBRL(chosen.perKmCents)}/km`
-                      : 'Escolha um motorista abaixo'
-                    : quote.pricingMode === 'variavel'
-                      ? 'Tarifa automática · pode variar com o tempo real da viagem'
-                      : 'Tarifa automática · preço fechado na solicitação'}
                 </p>
               </div>
 
@@ -311,10 +346,10 @@ export function PassengerHome() {
                       setError(null);
                     }}
                     data-testid={`price-mode-${v}`}
-                    className={`rounded-xl px-2 py-2 text-center transition ${priceMode === v ? 'bg-brand-grad text-navy-950 shadow-glow' : 'text-navy-600 hover:bg-white dark:text-navy-100 dark:hover:bg-navy-700'}`}
+                    className={`rounded-xl px-2 py-1.5 text-center transition ${priceMode === v ? 'bg-white text-navy shadow-sm dark:bg-petrol dark:text-white' : 'text-navy-500 hover:text-navy dark:text-navy-300'}`}
                   >
-                    <span className="block text-sm font-extrabold">{t}</span>
-                    <span className="block text-[11px] font-semibold opacity-80">{sub}</span>
+                    <span className="block text-[13px] font-extrabold">{t}</span>
+                    <span className="block text-[10px] font-semibold opacity-70">{sub}</span>
                   </button>
                 ))}
               </div>
@@ -341,7 +376,7 @@ export function PassengerHome() {
                             data-testid="driver-option"
                             className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition ${sel ? 'bg-brand-50 ring-brand dark:bg-brand/10' : 'bg-white ring-navy/5 hover:ring-brand/50 dark:bg-navy-900 dark:ring-white/10'}`}
                           >
-                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-grad text-lg font-extrabold text-navy-950">{d.name.slice(0, 1)}</span>
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-lg font-extrabold text-navy-950">{d.name.slice(0, 1)}</span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate font-bold">
                                 {d.name} {d.rating != null && <span className="text-sm font-semibold text-amber-500">★ {d.rating}</span>}
@@ -366,10 +401,12 @@ export function PassengerHome() {
                   </ul>
                 </div>
               )}
-              <PlaceLine icon="pin" title="Embarque" text={pickup.address} />
-              <PlaceLine icon="flag" title="Destino" text={dest.address} />
-              <details className="my-2 rounded-2xl bg-mist p-3 dark:bg-navy-800" open>
-                <summary className="cursor-pointer text-sm font-semibold">Detalhamento do preço</summary>
+              <details className="my-2 rounded-2xl bg-mist px-3 py-2 dark:bg-navy-800">
+                <summary className="cursor-pointer text-sm font-semibold">Detalhamento do preço e trajeto</summary>
+                <div className="mt-2">
+                  <PlaceLine icon="pin" title="Embarque" text={pickup.address} />
+                  <PlaceLine icon="flag" title="Destino" text={dest.address} />
+                </div>
                 <div className="mt-2">
                   {priceMode === 'escolher' && chosen && chosen.priceMode === 'proprio' ? (
                     <p className="text-sm text-navy-600 dark:text-navy-100">
@@ -380,9 +417,12 @@ export function PassengerHome() {
                   )}
                 </div>
               </details>
-              <Textarea placeholder="Observações para o motorista (opcional): ponto de referência, portão…" maxLength={200} value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <details className="mb-1">
+                <summary className="cursor-pointer py-1 text-sm font-semibold text-petrol dark:text-brand">+ Observação para o motorista</summary>
+                <Textarea className="mt-1" placeholder="Ponto de referência, portão… (opcional)" maxLength={200} value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </details>
               {error && <Banner tone="error" className="mt-2">{error}</Banner>}
-              <Button block size="lg" className="mt-3" loading={busy} onClick={request} disabled={settings?.operations_enabled === false || (priceMode === 'escolher' && !chosen)} data-testid="request-ride">
+              <Button block size="lg" className="mt-2" loading={busy} onClick={request} disabled={settings?.operations_enabled === false || (priceMode === 'escolher' && !chosen)} data-testid="request-ride">
                 {priceMode === 'escolher' ? (chosen ? `Pedir com ${chosen.name}` : 'Escolha um motorista') : 'Solicitar corrida'}
               </Button>
             </div>
@@ -459,178 +499,6 @@ function DestinationSearch({ bias, onPick, onBack }: { bias: LatLng; onPick: (p:
       </ul>
       {q.trim().length < 3 && <p className="text-xs text-navy-500 dark:text-navy-300">Digite pelo menos 3 caracteres.</p>}
       {items?.[0]?.source === 'simulado' && <p className="mt-2 text-xs text-fuchsia-700 dark:text-fuchsia-300">Sem Google Maps configurado: exibindo apenas pontos fictícios de teste.</p>}
-    </div>
-  );
-}
-
-/** Tela inicial estilo app de banco: saudação, "saldo" de corridas do mês, atalhos e extrato. */
-function PassengerDashboard({
-  profile,
-  geo,
-  rides,
-  recent,
-  askConsent,
-  onConsent,
-  onSearch,
-  onPick,
-}: {
-  profile: Profile | null;
-  geo: ReturnType<typeof useGeolocation>;
-  rides: Ride[] | null;
-  recent: Place[];
-  askConsent: boolean;
-  onConsent: (granted: boolean) => Promise<void>;
-  onSearch: () => void;
-  onPick: (p: Place) => void;
-}) {
-  const { settings } = useApp();
-  const [hidden, toggleHidden] = useHiddenValues();
-  const [info, setInfo] = useState<'seguranca' | 'ajuda' | null>(null);
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const monthRides = (rides ?? []).filter((r) => r.status === 'finalizada' && Date.parse(r.finishedAt ?? r.createdAt) >= monthStart.getTime());
-  const monthCents = monthRides.reduce((a, r) => a + r.totalCents, 0);
-  const statement: StatementItem[] = (rides ?? []).slice(0, 4).map((r) => ({
-    id: r.id,
-    at: r.finishedAt ?? r.createdAt,
-    icon: 'car',
-    title: r.dest.address.split(',')[0],
-    subtitle: r.status === 'finalizada' ? 'Corrida' : RIDE_STATUS_LABEL[r.status],
-    cents: r.totalCents,
-    muted: r.status === 'cancelada' || r.status === 'expirada',
-    to: `/corrida/${r.id}`,
-  }));
-  const monthName = new Date().toLocaleDateString('pt-BR', { month: 'long' });
-
-  return (
-    <div className="min-h-dvh bg-mist pb-28 dark:bg-transparent">
-      <BankHeader
-        name={profile?.fullName ?? ''}
-        hidden={hidden}
-        onToggleHidden={toggleHidden}
-        subtitle={
-          <span className="[&>span]:bg-white/10 [&>span]:text-white">
-            <GpsBadge geo={geo} label="" />
-          </span>
-        }
-        right={<HeaderIcon icon="help" label="Ajuda" onClick={() => setInfo('ajuda')} />}
-      >
-        <p className="text-[13px] font-semibold text-white/70">Para onde vamos hoje?</p>
-        <button
-          onClick={onSearch}
-          className="mt-2 flex h-14 w-full items-center gap-3 rounded-2xl bg-white px-4 text-left text-navy shadow-float transition active:scale-[.99]"
-          data-testid="open-search"
-        >
-          <Icon name="search" className="text-brand-700" />
-          <span className="flex-1 text-[15px] font-bold text-navy-500">Buscar destino</span>
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-grad text-navy-950">
-            <Icon name="chevronRight" size={18} />
-          </span>
-        </button>
-      </BankHeader>
-
-      <div className="mx-auto max-w-lg space-y-4 px-4 pt-5">
-        {settings && !settings.operations_enabled && <Banner tone="warn">Solicitações pausadas pelo administrador no momento.</Banner>}
-
-        {askConsent && (
-          <BankSection title="Usar sua localização?">
-            <p className="mb-3 text-sm leading-relaxed text-navy-600 dark:text-navy-100">
-              Usamos sua localização apenas para sugerir o ponto de embarque e mostrar o motorista a caminho. Ela não é compartilhada com outros passageiros e você pode revogar quando quiser no Perfil.
-            </p>
-            <Button block size="lg" onClick={() => void onConsent(true)}>
-              Permitir localização
-            </Button>
-            <Button block variant="ghost" className="mt-1" onClick={() => void onConsent(false)}>
-              Agora não (escolher no mapa)
-            </Button>
-          </BankSection>
-        )}
-
-        <QuickActions
-          items={[
-            { icon: 'car', label: 'Pedir corrida', onClick: onSearch, highlight: true },
-            { icon: 'receipt', label: 'Extrato', to: '/historico' },
-            { icon: 'qr', label: 'Pix', to: '/perfil' },
-            { icon: 'shield', label: 'Segurança', onClick: () => setInfo('seguranca') },
-            { icon: 'install', label: 'Instalar app', to: '/instalar' },
-          ]}
-        />
-
-        <BankSection>
-          <Link to="/historico" className="flex items-center gap-3" aria-label="Ver extrato de corridas">
-            <div className="min-w-0 flex-1">
-              <p className="eyebrow">Corridas em {monthName}</p>
-              <Money cents={monthCents} hidden={hidden} size="lg" className="mt-1 block" />
-              <p className="mt-1 text-sm text-navy-500 dark:text-navy-300">
-                {monthRides.length} corrida{monthRides.length === 1 ? '' : 's'} finalizada{monthRides.length === 1 ? '' : 's'}
-                {settings?.pilot_mode ? ' · valores simulados' : ''}
-              </p>
-            </div>
-            <Icon name="chevronRight" className="text-navy-300" />
-          </Link>
-        </BankSection>
-
-        {recent.length > 0 && (
-          <BankSection title="Destinos recentes">
-            <ul className="divide-y divide-navy/5 dark:divide-white/5">
-              {recent.map((r) => (
-                <li key={r.address}>
-                  <button onClick={() => onPick(r)} className="flex w-full items-center gap-3 py-3 text-left">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-royal/10 text-royal dark:bg-royal-400/20 dark:text-royal-400">
-                      <Icon name="history" size={20} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-bold">{r.label}</span>
-                      <span className="block truncate text-xs text-navy-500 dark:text-navy-300">{r.address}</span>
-                    </span>
-                    <Icon name="chevronRight" size={16} className="text-navy-300" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </BankSection>
-        )}
-
-        <button onClick={() => setInfo('seguranca')} className="relative block w-full overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#1B4FD8_0%,#102A43_100%)] p-5 text-left text-white shadow-float">
-          <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-royal-400/40 blur-2xl" />
-          <div className="relative flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-              <Icon name="shield" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[16px] font-extrabold">PIN em toda corrida</span>
-              <span className="block text-sm text-white/75">Motorista aprovado, placa conferida e código de embarque só seu.</span>
-            </span>
-            <Icon name="chevronRight" className="text-white/60" />
-          </div>
-        </button>
-
-        <BankSection title="Últimas corridas" action={<Link to="/historico" className="text-sm font-bold text-brand-700 dark:text-brand">Ver tudo</Link>}>
-          {!rides ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12" />
-              <Skeleton className="h-12" />
-            </div>
-          ) : (
-            <Statement items={statement} hidden={hidden} empty={<p className="py-2 text-sm text-navy-500 dark:text-navy-300">Suas corridas aparecem aqui, como um extrato.</p>} />
-          )}
-        </BankSection>
-
-        <GpsWarnings geo={geo} />
-      </div>
-
-      <Modal open={info === 'seguranca'} onClose={() => setInfo(null)} title="Sua segurança">
-        <ul className="space-y-3 text-sm leading-relaxed">
-          <li><strong>PIN de embarque:</strong> quando o motorista pede, diga os 4 números que aparecem no seu app. Ele só inicia a corrida se o código bater.</li>
-          <li><strong>Confira a placa e o carro</strong> antes de entrar. Os dados aparecem assim que o motorista aceita.</li>
-          <li><strong>Motoristas aprovados:</strong> só entram no piloto depois de aprovados pela equipe Leva Já.</li>
-          <li><strong>Preço antes:</strong> você vê o valor completo antes de confirmar e paga por Pix no final.</li>
-        </ul>
-      </Modal>
-      <Modal open={info === 'ajuda'} onClose={() => setInfo(null)} title="Ajuda">
-        <p className="text-sm leading-relaxed">{settings?.support_contact ? `Fale com o suporte: ${settings.support_contact}` : 'Durante o piloto, fale diretamente com a equipe que enviou o seu convite.'}</p>
-      </Modal>
     </div>
   );
 }

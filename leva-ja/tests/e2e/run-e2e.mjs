@@ -28,7 +28,7 @@ const step = async (name, fn) => {
     console.log('✔', name);
   } catch (e) {
     failures++;
-    console.error('✘', name, '\n   ', e.message.split('\n')[0]);
+    console.error('✘', name, '\n   ', e.message.split('\n').slice(0, 3).join(' / '));
   }
 };
 const expect = (c, m) => {
@@ -81,7 +81,7 @@ try {
     await driver.getByRole('button', { name: 'Entrar como motorista demo' }).click();
     await driver.getByRole('button', { name: 'Autorizar e continuar' }).click();
     await driver.getByRole('switch', { name: 'Ficar online' }).click();
-    await driver.getByText('Disponível para corridas').waitFor();
+    await driver.getByText('Você está online').waitFor();
     await driver.getByText(/Enviado há/).waitFor({ timeout: 15000 });
     await driver.screenshot({ path: `${shots}/02-motorista-disponivel.png` });
   });
@@ -222,22 +222,34 @@ try {
     await driver.screenshot({ path: `${shots}/11-motorista-preferencias.png` });
   });
 
-  await step('visual estilo banco: início, extrato e ganhos', async () => {
+  await step('visual: mapa em destaque, configurações e modo noturno', async () => {
     await pass.goto(`${BASE}/passageiro/#/`);
     await pass.reload();
     await pass.getByTestId('open-search').waitFor({ timeout: 10000 });
-    await pass.getByText('Últimas corridas').waitFor();
+    await pass.waitForTimeout(500);
     await pass.screenshot({ path: `${shots}/12-passageiro-inicio.png` });
-    await pass.screenshot({ path: `${shots}/12b-passageiro-inicio-completo.png`, fullPage: true });
     await pass.goto(`${BASE}/passageiro/#/historico`);
     await pass.getByText('Movimentações').waitFor({ timeout: 10000 });
+    await pass.waitForTimeout(500);
     await pass.screenshot({ path: `${shots}/13-passageiro-extrato.png` });
+    await pass.goto(`${BASE}/passageiro/#/perfil`);
+    await pass.getByTestId('theme-dark').click();
+    await pass.waitForTimeout(500);
+    await pass.screenshot({ path: `${shots}/16-passageiro-configuracoes-noturno.png` });
+    await pass.goto(`${BASE}/passageiro/#/`);
+    await pass.getByTestId('open-search').waitFor({ timeout: 10000 });
+    await pass.waitForTimeout(500);
+    await pass.screenshot({ path: `${shots}/17-passageiro-inicio-noturno.png` });
+    await pass.goto(`${BASE}/passageiro/#/perfil`);
+    await pass.getByTestId('theme-light').click();
     await driver.goto(`${BASE}/motorista/#/`);
     await driver.reload();
-    await driver.getByText(/Ganhos de hoje/).waitFor({ timeout: 10000 });
+    await driver.getByTestId('today-earnings').waitFor({ timeout: 10000 });
+    await driver.waitForTimeout(500);
     await driver.screenshot({ path: `${shots}/14-motorista-inicio.png` });
     await driver.goto(`${BASE}/motorista/#/ganhos`);
     await driver.getByText('Líquido no período').waitFor({ timeout: 10000 });
+    await driver.waitForTimeout(500);
     await driver.screenshot({ path: `${shots}/15-motorista-ganhos.png` });
   });
 

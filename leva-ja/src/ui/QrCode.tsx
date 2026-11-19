@@ -3,10 +3,10 @@ import { useEffect, useState } from 'react';
 import { Button } from './components';
 
 export async function qrSvg(text: string): Promise<string> {
-  return QRCode.toString(text, { type: 'svg', errorCorrectionLevel: 'M', margin: 2, color: { dark: '#102A43', light: '#FFFFFF' } });
+  return QRCode.toString(text, { type: 'svg', errorCorrectionLevel: 'M', margin: 2, color: { dark: '#31466F', light: '#FFFFFF' } });
 }
 export async function qrPngDataUrl(text: string, size = 1024): Promise<string> {
-  return QRCode.toDataURL(text, { errorCorrectionLevel: 'M', margin: 2, width: size, color: { dark: '#102A43', light: '#FFFFFF' } });
+  return QRCode.toDataURL(text, { errorCorrectionLevel: 'M', margin: 2, width: size, color: { dark: '#31466F', light: '#FFFFFF' } });
 }
 
 function download(href: string, name: string) {

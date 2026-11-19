@@ -1,12 +1,10 @@
 /**
- * Peças visuais "estilo app de banco": cabeçalho com saudação e olho para esconder valores,
- * cartão de saldo, atalhos redondos e extrato agrupado por dia.
+ * Peças visuais das telas de configuração/extrato: valores ocultáveis, seções e extrato agrupado por dia.
  */
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cx } from '../../ui/components';
 import { Icon, type IconName } from '../../ui/icons';
-import { useApp } from './AppContext';
 
 const HIDE_KEY = 'levaja-hide-values';
 
@@ -48,111 +46,6 @@ export function Money({ cents, hidden, className, size = 'lg' }: { cents: number
       <span className={big}>{int}</span>
       <span className={cx(small, 'font-bold')}>,{dec}</span>
     </span>
-  );
-}
-
-/** Cabeçalho de banco: avatar, saudação, olho e atalhos de topo. O conteúdo extra vem logo abaixo, no mesmo bloco colorido. */
-export function BankHeader({
-  name,
-  subtitle,
-  hidden,
-  onToggleHidden,
-  right,
-  children,
-  tone = 'passageiro',
-}: {
-  name: string;
-  subtitle?: ReactNode;
-  hidden: boolean;
-  onToggleHidden: () => void;
-  right?: ReactNode;
-  children?: ReactNode;
-  tone?: 'passageiro' | 'motorista';
-}) {
-  const { backend, settings } = useApp();
-  const ribbon = backend.mode === 'demo' || settings?.pilot_mode;
-  return (
-    <header
-      className={cx(
-        'relative overflow-hidden rounded-b-[36px] px-5 pb-6 text-white shadow-float',
-        tone === 'motorista' ? 'bg-[linear-gradient(160deg,#0A1B2C_0%,#0F3B3A_100%)]' : 'bg-[linear-gradient(160deg,#102A43_0%,#0B4D45_100%)]',
-        ribbon ? 'pt-[calc(env(safe-area-inset-top)+2.75rem)]' : 'pt-[calc(env(safe-area-inset-top)+1.25rem)]',
-      )}
-    >
-      <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand/25 blur-3xl" />
-      <div className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-lime-neon/10 blur-2xl" />
-      <div className="relative mx-auto max-w-lg">
-        <div className="flex items-center gap-3">
-          <Link to="/perfil" aria-label="Perfil" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg font-extrabold ring-2 ring-white/20 transition hover:bg-white/20">
-            {(name || 'L').slice(0, 1).toUpperCase()}
-          </Link>
-          <div className="min-w-0 flex-1">
-            <p className="title truncate text-[19px] font-extrabold leading-tight">Olá, {name?.split(' ')[0] || 'bem-vindo(a)'}</p>
-            {subtitle && <div className="mt-0.5 text-xs font-medium text-white/70">{subtitle}</div>}
-          </div>
-          <HeaderIcon icon={hidden ? 'eyeOff' : 'eye'} label={hidden ? 'Mostrar valores' : 'Esconder valores'} onClick={onToggleHidden} />
-          {right}
-        </div>
-        {children && <div className="mt-5">{children}</div>}
-      </div>
-    </header>
-  );
-}
-
-export function HeaderIcon({ icon, label, onClick, to }: { icon: IconName; label: string; onClick?: () => void; to?: string }) {
-  const cls = 'flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20 active:scale-95';
-  if (to)
-    return (
-      <Link to={to} aria-label={label} className={cls}>
-        <Icon name={icon} size={20} />
-      </Link>
-    );
-  return (
-    <button type="button" aria-label={label} onClick={onClick} className={cls}>
-      <Icon name={icon} size={20} />
-    </button>
-  );
-}
-
-export interface QuickAction {
-  icon: IconName;
-  label: string;
-  onClick?: () => void;
-  to?: string;
-  highlight?: boolean;
-  testId?: string;
-}
-
-/** Fileira de atalhos redondos com rótulo embaixo (Pix, Pagar, Transferir… versão corridas). */
-export function QuickActions({ items }: { items: QuickAction[] }) {
-  return (
-    <div className={cx('flex gap-2 pb-1', items.length > 5 ? '-mx-4 overflow-x-auto px-4 [scrollbar-width:none]' : 'justify-between')} role="list">
-      {items.map((a) => {
-        const circle = (
-          <span
-            className={cx(
-              'flex h-[60px] w-[60px] items-center justify-center rounded-full transition group-active:scale-95',
-              a.highlight ? 'bg-brand-grad text-navy-950 shadow-glow' : 'bg-white text-navy ring-1 ring-navy/5 shadow-card group-hover:ring-brand/40 dark:bg-navy-800 dark:text-white dark:ring-white/10',
-            )}
-          >
-            <Icon name={a.icon} size={24} />
-          </span>
-        );
-        const label = <span className="mt-2 block w-[66px] text-center text-[12px] font-bold leading-tight">{a.label}</span>;
-        const cls = 'group flex shrink-0 flex-col items-center';
-        return a.to ? (
-          <Link key={a.label} to={a.to} className={cls} role="listitem" data-testid={a.testId}>
-            {circle}
-            {label}
-          </Link>
-        ) : (
-          <button key={a.label} type="button" onClick={a.onClick} className={cls} role="listitem" data-testid={a.testId}>
-            {circle}
-            {label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
