@@ -13,7 +13,8 @@
     "test:sql": "bash supabase/tests/run_sql_tests.sh",
     "test:e2e": "node tests/e2e/run-e2e.mjs",
     "icons": "node scripts/generate-icons.mjs",
-    "seed:demo": "node scripts/seed-demo-supabase.mjs"
+    "seed:demo": "node scripts/seed-demo-supabase.mjs",
+    "video:demo": "node scripts/gravar-video-demo.mjs"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
