@@ -26,6 +26,8 @@ export interface MapViewProps {
   onPick?: (p: LatLng) => void;
   className?: string;
   dark?: boolean;
+  /** mapa pequeno (dentro de um cartão): avisos ficam no canto, não abaixo do cabeçalho */
+  compact?: boolean;
 }
 
 const COLORS = { pickup: '#00C896', dest: '#102A43', driver: '#00C896', me: '#2F80ED' };
@@ -209,7 +211,7 @@ function CenterPin() {
 // ======================= Mapa simulado (sem chave) =======================
 const mPerPx = (lat: number, z: number) => (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** z;
 
-function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, className, reason, fitKey }: MapViewProps & { reason?: string | null }) {
+function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, className, reason, fitKey, compact }: MapViewProps & { reason?: string | null }) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 360, h: 640 });
   const [view, setView] = useState({ c: center, z: zoom });
@@ -340,7 +342,7 @@ function SimulatedMap({ center, zoom = 15, markers, path, pickMode, onPick, clas
           );
         })}
       {pickMode && <CenterPin />}
-      <div className="pointer-events-none absolute left-3 top-[calc(env(safe-area-inset-top)+8.75rem)] rounded-full bg-fuchsia-600/85 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+      <div className={`pointer-events-none absolute left-3 ${compact ? 'top-3' : 'top-[calc(env(safe-area-inset-top)+8.75rem)]'} rounded-full bg-fuchsia-600/85 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow`}>
         Mapa ilustrativo{reason ? '' : ' · sem Google Maps'}
       </div>
       {reason && <div className="pointer-events-none absolute inset-x-4 top-[calc(env(safe-area-inset-top)+7rem)] rounded-xl bg-white/90 p-2 text-center text-xs text-navy shadow">{reason}</div>}

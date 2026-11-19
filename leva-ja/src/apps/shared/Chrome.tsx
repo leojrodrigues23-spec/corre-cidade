@@ -59,8 +59,11 @@ export function TopBar({ title, variant, right, back }: { title?: string; varian
 
 export function BottomNav({ items }: { items: { to: string; label: string; icon: IconName }[] }) {
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)]" aria-label="Navegação principal">
-      <div className="pointer-events-auto mx-auto flex max-w-sm justify-between gap-1 rounded-full bg-navy-950/90 p-1.5 shadow-float ring-1 ring-white/10 backdrop-blur-xl">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-navy/5 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(16,42,67,.06)] backdrop-blur-xl dark:border-white/5 dark:bg-navy-950/95"
+      aria-label="Navegação principal"
+    >
+      <div className="mx-auto flex h-16 max-w-lg">
         {items.map((i) => (
           <NavLink
             key={i.to}
@@ -68,13 +71,18 @@ export function BottomNav({ items }: { items: { to: string; label: string; icon:
             end={i.to === '/'}
             className={({ isActive }) =>
               cx(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-[12px] font-bold transition-all duration-300',
-                isActive ? 'bg-brand-grad text-navy-950 shadow-glow' : 'text-navy-100 hover:text-white',
+                'relative flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-bold transition-colors',
+                isActive ? 'text-brand-700 dark:text-brand' : 'text-navy-400 hover:text-navy dark:text-navy-300 dark:hover:text-white',
               )
             }
           >
-            <Icon name={i.icon} size={20} />
-            <span>{i.label}</span>
+            {({ isActive }) => (
+              <>
+                {isActive && <span className="absolute top-0 h-1 w-10 rounded-b-full bg-brand-grad" />}
+                <Icon name={i.icon} size={22} />
+                <span>{i.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </div>

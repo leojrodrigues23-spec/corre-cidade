@@ -1,3 +1,4 @@
+@import '@fontsource-variable/plus-jakarta-sans';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -18,6 +19,11 @@
   body {
     @apply bg-mist font-sans text-navy antialiased dark:bg-navy-950 dark:bg-aurora dark:bg-fixed dark:text-white;
     overscroll-behavior-y: none;
+    font-feature-settings: 'cv11', 'ss01';
+    letter-spacing: -0.005em;
+  }
+  h1, h2, h3, .title {
+    letter-spacing: -0.02em;
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -38,6 +44,9 @@
   .pl-safe { padding-left: env(safe-area-inset-left); }
   .pr-safe { padding-right: env(safe-area-inset-right); }
   .h-dvh { height: 100dvh; }
+  /* rótulos pequenos estilo app de banco */
+  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.12em] text-navy-500 dark:text-navy-300; }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
 }
 
 /* Marcador do motorista: anel de pulso */

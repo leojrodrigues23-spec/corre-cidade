@@ -222,6 +222,25 @@ try {
     await driver.screenshot({ path: `${shots}/11-motorista-preferencias.png` });
   });
 
+  await step('visual estilo banco: início, extrato e ganhos', async () => {
+    await pass.goto(`${BASE}/passageiro/#/`);
+    await pass.reload();
+    await pass.getByTestId('open-search').waitFor({ timeout: 10000 });
+    await pass.getByText('Últimas corridas').waitFor();
+    await pass.screenshot({ path: `${shots}/12-passageiro-inicio.png` });
+    await pass.screenshot({ path: `${shots}/12b-passageiro-inicio-completo.png`, fullPage: true });
+    await pass.goto(`${BASE}/passageiro/#/historico`);
+    await pass.getByText('Movimentações').waitFor({ timeout: 10000 });
+    await pass.screenshot({ path: `${shots}/13-passageiro-extrato.png` });
+    await driver.goto(`${BASE}/motorista/#/`);
+    await driver.reload();
+    await driver.getByText(/Ganhos de hoje/).waitFor({ timeout: 10000 });
+    await driver.screenshot({ path: `${shots}/14-motorista-inicio.png` });
+    await driver.goto(`${BASE}/motorista/#/ganhos`);
+    await driver.getByText('Líquido no período').waitFor({ timeout: 10000 });
+    await driver.screenshot({ path: `${shots}/15-motorista-ganhos.png` });
+  });
+
   await step('sem erros de JavaScript nas páginas', async () => expect(errors.length === 0, errors.join(' | ')));
 } finally {
   await browser.close();

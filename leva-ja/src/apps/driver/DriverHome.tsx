@@ -8,8 +8,18 @@ import { Badge, Banner, Button, Card, EmptyState, Skeleton, useToast } from '../
 import { formatBRL, formatDistance, formatDuration } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { useApp } from '../shared/AppContext';
+import { BankHeader, HeaderIcon, Money, QuickActions, useHiddenValues } from '../shared/Bank';
 import { GpsWarnings } from '../shared/ride';
 import { useDriver } from './runtime';
+
+const SEND_REASON: Record<string, string> = {
+  stale: 'sinal antigo',
+  throttled: 'aguardando intervalo',
+  out_of_order: 'sinal repetido',
+  implausible_jump: 'salto de GPS ignorado',
+  invalid_accuracy: 'precisão inválida',
+  future: 'relógio do aparelho adiantado',
+};
 
 export function DriverHome() {
   const { backend, settings, theme } = useApp();
@@ -21,6 +31,11 @@ export function DriverHome() {
   const [now, setNow] = useState(Date.now());
   const [toggling, setToggling] = useState(false);
   const [today, setToday] = useState<Earnings | null>(null);
+  const [hidden, toggleHidden] = useHiddenValues();
+  const [name, setName] = useState('');
+  useEffect(() => {
+    backend.getProfile().then((p) => setName(p.fullName)).catch(() => undefined);
+  }, [backend]);
   useEffect(() => {
     backend.getEarnings(1).then(setToday).catch(() => undefined);
   }, [backend, d.activeRideId]);
@@ -94,10 +109,46 @@ export function DriverHome() {
 
   return (
     <div className="min-h-dvh pb-28">
-      <div className="relative h-[38dvh]">
-        <MapView className="absolute inset-0" center={center} zoom={14} markers={markers} fitKey={offers?.map((o) => o.rideId).join(',') || (d.fix ? 'me' : undefined)} dark={theme.dark} />
-      </div>
-      <div className="relative z-10 mx-auto -mt-6 max-w-lg space-y-3 px-3">
+      <BankHeader
+        tone="motorista"
+        name={name}
+        hidden={hidden}
+        onToggleHidden={toggleHidden}
+        subtitle={
+          s.status === 'aprovado' ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${s.isAvailable ? 'bg-brand shadow-[0_0_8px_#00C896]' : 'bg-white/40'}`} />
+              {s.isAvailable ? 'Online · recebendo corridas' : 'Offline'}
+            </span>
+          ) : (
+            'Cadastro em análise'
+          )
+        }
+        right={<HeaderIcon icon="settings" label="Preferências" to="/perfil" />}
+      >
+        <Link to="/ganhos" className="flex items-end justify-between gap-3" aria-label="Ver ganhos">
+          <div>
+            <p className="text-[13px] font-semibold text-white/70">Ganhos de hoje{settings?.pilot_mode ? ' (simulado)' : ''}</p>
+            <Money cents={today?.netCents ?? 0} hidden={hidden} size="xl" className="mt-1 block" />
+            <p className="mt-1 text-xs text-white/60">
+              {today ? `${today.rides} corrida${today.rides === 1 ? '' : 's'} · líquido após comissão` : 'Carregando…'}
+            </p>
+          </div>
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+            <Icon name="chevronRight" />
+          </span>
+        </Link>
+      </BankHeader>
+      <div className="relative z-10 mx-auto max-w-lg space-y-4 px-4 pt-5">
+        <QuickActions
+          items={[
+            { icon: 'wallet', label: 'Ganhos', to: '/ganhos', highlight: true },
+            { icon: 'receipt', label: 'Extrato', to: '/ganhos' },
+            { icon: 'money', label: 'Meu preço', to: '/perfil' },
+            { icon: 'shield', label: 'PIN', to: '/perfil' },
+            { icon: 'qr', label: 'Pix', to: '/perfil' },
+          ]}
+        />
         {s.status !== 'aprovado' && (
           <Card>
             <div className="mb-2 flex items-center gap-2">
@@ -115,24 +166,6 @@ export function DriverHome() {
               </Button>
             </Link>
           </Card>
-        )}
-
-        {s.status === 'aprovado' && today && (
-          <Link to="/ganhos" className="block">
-            <div className="relative overflow-hidden rounded-[28px] bg-price-grad p-4 text-white shadow-float">
-              <div className="absolute -right-6 -top-8 h-28 w-28 rounded-full bg-lime-neon/30 blur-2xl" />
-              <div className="relative flex items-end justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-navy-100">Ganhos de hoje</p>
-                  <p className="text-3xl font-extrabold tabular-nums">{formatBRL(today.netCents)}</p>
-                  <p className="text-xs text-navy-100">{today.rides} corrida{today.rides === 1 ? '' : 's'} · líquido{settings?.pilot_mode ? ' simulado' : ''}</p>
-                </div>
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-grad text-navy-950 shadow-glow">
-                  <Icon name="wallet" />
-                </span>
-              </div>
-            </div>
-          </Link>
         )}
 
         {s.status === 'aprovado' && (
@@ -179,7 +212,7 @@ export function DriverHome() {
                 {s.isAvailable && (
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
                     <Badge tone={fixA && !fixA.stale ? 'green' : 'amber'}>{d.simulated ? 'GPS SIMULADO' : fixA ? fixA.label : 'Aguardando GPS…'}</Badge>
-                    {d.lastSent && <Badge>{d.lastSent.accepted ? `Enviado há ${Math.round((now - d.lastSent.at) / 1000)}s` : `Envio recusado: ${d.lastSent.reason}`}</Badge>}
+                    {d.lastSent && <Badge>{d.lastSent.accepted ? `Enviado há ${Math.round((now - d.lastSent.at) / 1000)}s` : `Posição não enviada: ${SEND_REASON[d.lastSent.reason ?? ''] ?? 'aguardando novo sinal'}`}</Badge>}
                     <Badge tone={d.wakeLock ? 'green' : 'neutral'}>{d.wakeLock ? 'Tela mantida ligada' : 'Mantenha o app aberto'}</Badge>
                   </div>
                 )}
@@ -198,6 +231,14 @@ export function DriverHome() {
               </>
             )}
           </Card>
+        )}
+
+        {s.isAvailable && (
+          <div className="overflow-hidden rounded-[28px] shadow-card ring-1 ring-navy/5 dark:ring-white/5">
+            <div className="relative h-52">
+              <MapView compact className="absolute inset-0" center={center} zoom={14} markers={markers} fitKey={offers?.map((o) => o.rideId).join(',') || (d.fix ? 'me' : undefined)} dark={theme.dark} />
+            </div>
+          </div>
         )}
 
         {s.isAvailable && (

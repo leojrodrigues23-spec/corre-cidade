@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
+import { HashRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { normalizePixKey, type PixKeyType } from '../../core/pix';
 import { normalizePlate } from '../../core/validation';
 import { friendlyError } from '../../data/errors';
 import type { DriverPreferences, Earnings, Ride } from '../../data/types';
 import { Banner, Button, Card, EmptyState, Field, Input, KeyValue, SectionTitle, Select, Skeleton, ToastProvider, Toggle, useToast } from '../../ui/components';
-import { formatBRL, formatDateTime } from '../../ui/format';
+import { formatBRL } from '../../ui/format';
 import { Icon } from '../../ui/icons';
 import { AppProvider, useApp } from '../shared/AppContext';
 import { captureInviteFromUrl, Gate } from '../shared/Auth';
 import { BottomNav, StatusRibbons, TopBar, UpdateBanner } from '../shared/Chrome';
+import { ScrollToTop } from '../shared/ScrollToTop';
 import { InstallGuide } from '../shared/InstallPage';
 import { ProfilePage } from '../shared/ProfilePage';
 import { RideStatusPill, useNotificationFeed } from '../shared/ride';
+import { BankSection, Money, Statement, type StatementItem, useHiddenValues } from '../shared/Bank';
+import { RIDE_STATUS_LABEL } from '../../core/ride';
 import { DriverHome } from './DriverHome';
 import { DriverRidePage } from './DriverRidePage';
 import { DriverRuntime, useDriver } from './runtime';
@@ -25,6 +28,7 @@ export function DriverRoot({ updateApply }: { updateApply: (() => void) | null }
       <AppProvider app="motorista">
         <HashRouter>
           <StatusRibbons />
+          <ScrollToTop />
           <Gate>
             <DriverRuntime>
               <Shell />
@@ -57,7 +61,7 @@ function Shell() {
       </Routes>
       <BottomNav
         items={[
-          { to: '/', label: 'Corridas', icon: 'steering' },
+          { to: '/', label: 'Início', icon: 'home' },
           { to: '/ganhos', label: 'Ganhos', icon: 'wallet' },
           { to: '/perfil', label: 'Perfil', icon: 'user' },
         ]}
@@ -66,10 +70,10 @@ function Shell() {
   );
 }
 
-function Page({ title, children }: { title: string; children: React.ReactNode }) {
+function Page({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="min-h-dvh">
-      <TopBar variant="motorista" title={title} />
+      <TopBar variant="motorista" title={title} right={right} />
       {children}
     </div>
   );
@@ -80,6 +84,7 @@ function EarningsPage() {
   const [days, setDays] = useState(7);
   const [e, setE] = useState<Earnings | null>(null);
   const [rides, setRides] = useState<Ride[] | null>(null);
+  const [hidden, toggleHidden] = useHiddenValues();
   useEffect(() => {
     setE(null);
     backend.getEarnings(days).then(setE);
@@ -87,53 +92,56 @@ function EarningsPage() {
   useEffect(() => {
     backend.listDriverRides().then(setRides);
   }, [backend]);
+  const items: StatementItem[] = (rides ?? []).map((r) => ({
+    id: r.id,
+    at: r.finishedAt ?? r.createdAt,
+    icon: r.status === 'finalizada' ? 'money' : 'car',
+    title: r.dest.address.split(',')[0],
+    subtitle: r.status === 'finalizada' ? `bruto ${formatBRL(r.totalCents)}` : RIDE_STATUS_LABEL[r.status],
+    cents: r.driverNetCents,
+    tone: 'in',
+    muted: r.status === 'cancelada' || r.status === 'expirada',
+    tag: ['finalizada', 'cancelada', 'expirada'].includes(r.status) ? undefined : <RideStatusPill status={r.status} />,
+    to: `/corrida/${r.id}`,
+  }));
   return (
-    <Page title="Ganhos">
-      <div className="mx-auto max-w-lg px-4 pb-28">
-        {settings?.pilot_mode && <Banner tone="warn" className="mt-2">Valores simulados do piloto. Comissão é apenas calculada, não é cobrada automaticamente.</Banner>}
-        <div className="mt-3 inline-flex rounded-2xl bg-white p-1 ring-1 ring-navy/10 dark:bg-navy-900 dark:ring-white/10">
+    <Page title="Ganhos" right={<button onClick={toggleHidden} aria-label={hidden ? 'Mostrar valores' : 'Esconder valores'} className="rounded-full p-2 hover:bg-navy/5 dark:hover:bg-white/10"><Icon name={hidden ? 'eyeOff' : 'eye'} /></button>}>
+      <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-2">
+        {settings?.pilot_mode && <Banner tone="warn">Valores simulados do piloto. Comissão é apenas calculada, não é cobrada automaticamente.</Banner>}
+        <div className="inline-flex rounded-full bg-white p-1 shadow-card ring-1 ring-navy/5 dark:bg-navy-900 dark:ring-white/10">
           {[1, 7, 30].map((d) => (
-            <button key={d} onClick={() => setDays(d)} className={`rounded-xl px-4 py-1.5 text-sm font-semibold ${days === d ? 'bg-navy text-white dark:bg-white dark:text-navy' : 'text-navy-500'}`}>
+            <button key={d} onClick={() => setDays(d)} className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${days === d ? 'bg-brand-grad text-navy-950 shadow-glow' : 'text-navy-500 dark:text-navy-300'}`}>
               {d === 1 ? 'Hoje' : `${d} dias`}
             </button>
           ))}
         </div>
-        <Card className="mt-3">
+        <BankSection>
           {!e ? (
             <Skeleton className="h-32" />
           ) : (
             <>
-              <p className="text-sm text-navy-500 dark:text-navy-300">Líquido no período</p>
-              <p className="mb-3 text-3xl font-extrabold tabular-nums">{formatBRL(e.netCents)}</p>
-              <KeyValue k="Corridas finalizadas" v={e.rides} />
-              <KeyValue k="Ganhos brutos" v={formatBRL(e.grossCents)} />
-              <KeyValue k="Comissão simulada" v={`− ${formatBRL(e.commissionCents)}`} />
-              <KeyValue k="Pagamentos confirmados (manual)" v={formatBRL(e.confirmedNetCents)} />
-              <KeyValue k="Pendentes de confirmação" v={formatBRL(e.pendingNetCents)} />
+              <p className="eyebrow">Líquido no período</p>
+              <Money cents={e.netCents} hidden={hidden} size="xl" className="mb-4 mt-1 block" />
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['Corridas', null, e.rides],
+                  ['Bruto', e.grossCents, null],
+                  ['Comissão', -e.commissionCents, null],
+                  ['Confirmado', e.confirmedNetCents, null],
+                ] as const).map(([k, cents, n]) => (
+                  <div key={k} className="rounded-2xl bg-mist p-3 dark:bg-navy-800">
+                    <p className="eyebrow">{k}</p>
+                    {cents === null ? <p className="num mt-1 text-xl font-extrabold">{n}</p> : <Money cents={cents} hidden={hidden} size="md" className="mt-1 block" />}
+                  </div>
+                ))}
+              </div>
+              <KeyValue k="Pendentes de confirmação" v={hidden ? 'R$ ••••' : formatBRL(e.pendingNetCents)} />
             </>
           )}
-        </Card>
-        <SectionTitle>Histórico</SectionTitle>
-        {!rides && <Skeleton className="h-24" />}
-        {rides?.length === 0 && <EmptyState icon="history" title="Nenhuma corrida ainda" />}
-        {rides?.map((r) => (
-          <Link key={r.id} to={`/corrida/${r.id}`}>
-            <Card className="mb-2 flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{r.dest.address}</p>
-                <p className="text-xs text-navy-500">{formatDateTime(r.createdAt)}</p>
-                <div className="mt-1">
-                  <RideStatusPill status={r.status} />
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-bold tabular-nums">{formatBRL(r.driverNetCents)}</p>
-                <p className="text-xs text-navy-500">bruto {formatBRL(r.totalCents)}</p>
-              </div>
-              <Icon name="chevronRight" size={18} className="text-navy-300" />
-            </Card>
-          </Link>
-        ))}
+        </BankSection>
+        <BankSection title="Extrato">
+          {!rides ? <Skeleton className="h-24" /> : <Statement items={items} hidden={hidden} empty={<EmptyState icon="history" title="Nenhuma corrida ainda" />} />}
+        </BankSection>
       </div>
     </Page>
   );

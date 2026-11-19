@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        navy: { DEFAULT: '#102A43', 950: '#0A1B2C', 900: '#102A43', 800: '#1B3A5A', 700: '#243B53', 600: '#334E68', 500: '#486581', 300: '#9FB3C8', 100: '#D9E2EC' },
+        navy: { DEFAULT: '#102A43', 950: '#0A1B2C', 900: '#102A43', 800: '#1B3A5A', 700: '#243B53', 600: '#334E68', 500: '#486581', 400: '#7B8FA6', 300: '#9FB3C8', 100: '#D9E2EC', 50: '#F0F4F8' },
         brand: { DEFAULT: '#00C896', 600: '#00A87E', 700: '#008A68', 400: '#33D3AB', 100: '#CCF4EA', 50: '#E6FAF4' },
         lime: { brand: '#7ED321', neon: '#9BE33A' },
         mist: '#F4F6F8',
@@ -13,7 +13,7 @@ export default {
         sun: '#FFC53D',
       },
       fontFamily: {
-        sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans Variable"', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 2px rgba(16,42,67,.06), 0 8px 24px rgba(16,42,67,.08)',
