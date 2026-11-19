@@ -38,7 +38,7 @@ const ctx = await browser.newContext({
   locale: 'pt-BR',
   geolocation: { latitude: -23.153, longitude: -47.0577, accuracy: 12 },
   permissions: ['geolocation'],
-  recordVideo: { dir: raw, size: { width: PHONE.width * 2, height: PHONE.height * 2 } },
+  recordVideo: { dir: raw, size: PHONE },
 });
 const pass = await ctx.newPage();
 const driver = await ctx.newPage();
