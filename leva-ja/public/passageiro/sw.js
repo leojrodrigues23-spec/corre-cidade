@@ -6,8 +6,10 @@
  */
 const BUILD_ID = '__BUILD_ID__';
 const CACHE = 'levaja-passageiro-' + BUILD_ID;
-const SHELL = '/passageiro/';
-const PRECACHE = [SHELL, '/passageiro/manifest.webmanifest', '/icons/passageiro/icon-192.png', '/icons/passageiro/icon-512.png'];
+// Funciona em qualquer endereço base (domínio próprio ou subpasta do GitHub Pages)
+const SHELL = new URL('./', self.registration.scope).pathname;
+const ROOT = new URL('../', self.registration.scope).pathname;
+const PRECACHE = [SHELL, SHELL + 'manifest.webmanifest', ROOT + 'icons/passageiro/icon-192.png', ROOT + 'icons/passageiro/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).catch(() => undefined));
@@ -43,7 +45,7 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/brand/')) {
+  if (url.pathname.startsWith(ROOT + 'assets/') || url.pathname.startsWith(ROOT + 'icons/') || url.pathname.startsWith(ROOT + 'brand/')) {
     event.respondWith(
       caches.match(req).then(
         (hit) =>
@@ -64,7 +66,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      const open = list.find((c) => c.url.includes('/passageiro/'));
+      const open = list.find((c) => c.url.includes(SHELL));
       return open ? open.focus() : self.clients.openWindow(SHELL);
     }),
   );

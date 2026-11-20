@@ -54,8 +54,15 @@ try {
 
   await step('manifests independentes (id/scope/start_url/nome/ícones)', async () => {
     const p = await ctx.newPage();
-    const m1 = await (await p.goto(BASE + '/passageiro/manifest.webmanifest')).json();
-    const m2 = await (await p.goto(BASE + '/motorista/manifest.webmanifest')).json();
+    // caminhos relativos ao próprio manifesto: funcionam em domínio próprio e em subpasta (GitHub Pages)
+    const load = async (app) => {
+      const url = `${BASE}/${app}/manifest.webmanifest`;
+      const m = await (await p.goto(url)).json();
+      const abs = (x) => new URL(x, url).pathname;
+      return { ...m, id: abs(m.id), scope: abs(m.scope), start_url: abs(m.start_url), icons: m.icons.map((i) => ({ ...i, src: abs(i.src) })) };
+    };
+    const m1 = await load('passageiro');
+    const m2 = await load('motorista');
     expect(m1.name === 'Leva Já' && m2.name === 'Leva Já Motorista', 'nomes');
     expect(m1.id !== m2.id && m1.scope === '/passageiro/' && m2.scope === '/motorista/', 'escopos distintos');
     expect(m1.start_url.startsWith(m1.scope) && m2.start_url.startsWith(m2.scope), 'start_url dentro do escopo');

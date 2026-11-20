@@ -23,14 +23,14 @@ export function Landing() {
             </p>
           </div>
           <picture>
-            <source srcSet="/brand/leva-ja-logo.webp" type="image/webp" />
-            <img src="/brand/leva-ja-logo.jpg" alt="Logomarca Leva Já — Seu destino começa aqui!" width={960} height={640} className="w-full rounded-3xl shadow-2xl ring-1 ring-white/10" />
+            <source srcSet={`${import.meta.env.BASE_URL}brand/leva-ja-logo.webp`} type="image/webp" />
+            <img src={`${import.meta.env.BASE_URL}brand/leva-ja-logo.jpg`} alt="Logomarca Leva Já — Seu destino começa aqui!" width={960} height={640} className="w-full rounded-3xl shadow-2xl ring-1 ring-white/10" />
           </picture>
         </section>
 
         <section className="mt-10 grid gap-4 md:grid-cols-2" aria-label="Escolha seu perfil">
-          <ProfileCard href="/passageiro/" install="/passageiro/#/instalar" variant="passageiro" title="Sou Passageiro" text="Peça corridas, acompanhe o motorista em tempo real e pague com Pix." cta="Abrir Leva Já" />
-          <ProfileCard href="/motorista/" install="/motorista/#/instalar" variant="motorista" title="Sou Motorista" text="Receba solicitações, navegue com Waze ou Google Maps e acompanhe seus ganhos." cta="Abrir Leva Já Motorista" />
+          <ProfileCard href={`${import.meta.env.BASE_URL}passageiro/`} install={`${import.meta.env.BASE_URL}passageiro/#/instalar`} variant="passageiro" title="Sou Passageiro" text="Peça corridas, acompanhe o motorista em tempo real e pague com Pix." cta="Abrir Leva Já" />
+          <ProfileCard href={`${import.meta.env.BASE_URL}motorista/`} install={`${import.meta.env.BASE_URL}motorista/#/instalar`} variant="motorista" title="Sou Motorista" text="Receba solicitações, navegue com Waze ou Google Maps e acompanhe seus ganhos." cta="Abrir Leva Já Motorista" />
         </section>
 
         <section className="mt-10 grid gap-3 text-sm text-navy-100 md:grid-cols-3">
@@ -50,7 +50,7 @@ export function Landing() {
         <footer className="mt-12 border-t border-white/10 py-6 text-xs text-navy-300">
           <p>Leva Já — piloto privado. Transporte remunerado somente após verificação das exigências legais municipais e federais.</p>
           <p className="mt-2">
-            <a className="underline" href="/privacidade.html">Política de privacidade</a> · <a className="underline" href="/admin/">Administração</a>
+            <a className="underline" href={`${import.meta.env.BASE_URL}privacidade.html`}>Política de privacidade</a> · <a className="underline" href={`${import.meta.env.BASE_URL}admin/`}>Administração</a>
           </p>
         </footer>
       </div>

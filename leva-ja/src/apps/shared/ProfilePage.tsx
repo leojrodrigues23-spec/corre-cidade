@@ -122,7 +122,7 @@ export function ProfilePage({ extra }: { extra?: ReactNode }) {
             </Button>
           )}
         </div>
-        <a href="/privacidade.html" target="_blank" rel="noopener" className="flex items-center justify-between border-t border-navy/10 pt-3 text-sm font-semibold dark:border-white/10">
+        <a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener" className="flex items-center justify-between border-t border-navy/10 pt-3 text-sm font-semibold dark:border-white/10">
           Política de privacidade <Icon name="chevronRight" size={18} />
         </a>
       </Card>

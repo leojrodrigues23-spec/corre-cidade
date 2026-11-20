@@ -14,7 +14,8 @@
     "test:e2e": "node tests/e2e/run-e2e.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "seed:demo": "node scripts/seed-demo-supabase.mjs",
-    "video:demo": "node scripts/gravar-video-demo.mjs"
+    "video:demo": "node scripts/gravar-video-demo.mjs",
+    "build:pages": "tsc -b && LEVAJA_BASE=/corre-cidade/ vite build --outDir ../docs --emptyOutDir && touch ../docs/.nojekyll"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",

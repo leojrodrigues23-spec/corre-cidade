@@ -6,12 +6,16 @@ import { resolve } from 'node:path';
 // Carimba um BUILD_ID nos service workers: cada deploy muda o SW e dispara o aviso "Nova versão disponível".
 function stampServiceWorkers() {
   const id = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  let outDir = resolve(__dirname, 'dist');
   return {
     name: 'levaja-stamp-sw',
     apply: 'build' as const,
+    configResolved(c: { root: string; build: { outDir: string } }) {
+      outDir = resolve(c.root, c.build.outDir);
+    },
     closeBundle() {
       for (const app of ['passageiro', 'motorista']) {
-        const f = resolve(__dirname, 'dist', app, 'sw.js');
+        const f = resolve(outDir, app, 'sw.js');
         if (existsSync(f)) writeFileSync(f, readFileSync(f, 'utf8').replace('__BUILD_ID__', id));
       }
     },
@@ -25,6 +29,8 @@ function stampServiceWorkers() {
 //   /admin/      painel administrativo (não instalável)
 // Cada PWA tem manifest e service worker próprios em public/<perfil>/.
 export default defineConfig({
+  // Endereço base: '/' (domínio próprio) ou '/corre-cidade/' (GitHub Pages). Defina LEVAJA_BASE no build.
+  base: process.env.LEVAJA_BASE || '/',
   plugins: [react(), stampServiceWorkers()],
   build: {
     target: 'es2020',

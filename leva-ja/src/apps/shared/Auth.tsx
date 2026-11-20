@@ -120,7 +120,7 @@ export function AuthScreen() {
                 <input type="checkbox" className="mt-1 h-4 w-4 accent-brand" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
                 <span>
                   Li e aceito a{' '}
-                  <a href="/privacidade.html" target="_blank" rel="noopener" className="font-semibold text-brand-700 underline dark:text-brand">
+                  <a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener" className="font-semibold text-brand-700 underline dark:text-brand">
                     Política de Privacidade
                   </a>{' '}
                   do piloto.

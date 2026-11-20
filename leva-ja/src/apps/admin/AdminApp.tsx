@@ -308,7 +308,7 @@ function Invites() {
   const [note, setNote] = useState('');
   const [created, setCreated] = useState<CreatedInvite | null>(null);
   const base = appBase(settings);
-  const linkFor = (inv: CreatedInvite) => `${base ?? window.location.origin}/${inv.role}/#/convite/${inv.token}`;
+  const linkFor = (inv: CreatedInvite) => `${base ?? window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, '')}/${inv.role}/#/convite/${inv.token}`;
   return (
     <>
       <H1>Convites</H1>

@@ -66,7 +66,7 @@ export function registerServiceWorker(app: 'passageiro' | 'motorista', onUpdate:
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
   window.addEventListener('load', async () => {
     try {
-      const reg = await navigator.serviceWorker.register(`/${app}/sw.js`, { scope: `/${app}/` });
+      const reg = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}${app}/sw.js`, { scope: `${import.meta.env.BASE_URL}${app}/` });
       const offer = (w: ServiceWorker) =>
         onUpdate(() => {
           w.postMessage({ type: 'SKIP_WAITING' });
@@ -78,9 +78,11 @@ export function registerServiceWorker(app: 'passageiro' | 'motorista', onUpdate:
           if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w);
         });
       });
+      // recarrega só quando uma VERSÃO NOVA assume (na primeira visita não há o que recarregar)
+      const hadController = !!navigator.serviceWorker.controller;
       let reloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!reloaded) {
+        if (hadController && !reloaded) {
           reloaded = true;
           window.location.reload();
         }

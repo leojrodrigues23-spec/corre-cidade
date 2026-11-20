@@ -70,3 +70,16 @@ Não são necessárias regras de rewrite (roteamento por `#/`).
   npm run seed:demo -- --remover            # remove (ou bloqueia, se já tiverem corridas)
   ```
   Cria passageiro, motorista (aprovado, veículo DEM0A00, chave Pix `.invalid`) e admin (TOTP no 1º acesso), todos com "DEMO" no nome.
+
+## Publicação no GitHub Pages (piloto)
+
+O app publicado fica em `https://leojrodrigues23-spec.github.io/corre-cidade/` (landing), com `/passageiro/`, `/motorista/` e `/admin/`.
+
+- Gerar a versão publicada: `npm run build:pages`. A saída vai para `/docs` na raiz do repositório, com `.nojekyll`.
+- Depois, faça commit e push de `/docs`.
+- Ativação (uma vez): no GitHub, abra **Settings → Pages → Build and deployment**, escolha **Deploy from a branch**, selecione o branch publicado e a pasta **/docs**, e clique em **Save**.
+- `.env.production` guarda só a URL do Supabase e a chave **anon**, que são públicas. Segredos nunca vão para esse arquivo.
+- No Supabase, em **Authentication → URL Configuration**:
+  - Site URL: `https://leojrodrigues23-spec.github.io/corre-cidade/`
+  - Redirect URLs: `https://leojrodrigues23-spec.github.io/corre-cidade/**`
+- O endereço base vem de `LEVAJA_BASE`. Sem essa variável, o padrão é `/`, para domínio próprio ou para Netlify e Vercel.
